@@ -1,0 +1,51 @@
+# bifrost-values-prod.yaml
+# Production HA install — 3 replicas, PostgreSQL, autoscaling
+# Usage: helm install bifrost bifrost/bifrost -n ai-gateway -f bifrost-values-prod.yaml
+
+image:
+  tag: v1.4.24
+
+replicaCount: 3
+
+storage:
+  mode: postgres
+
+postgresql:
+  enabled: true
+  auth:
+    username: bifrost
+    database: bifrost
+    existingSecret: postgres-credentials
+    secretKeys:
+      adminPasswordKey: password
+  primary:
+    persistence:
+      size: 50Gi
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+bifrost:
+  encryptionKeySecret:
+    name: bifrost-encryption-key
+    key: encryption-key
+  client:
+    initialPoolSize: 500
+    dropExcessRequests: true
+    enableLogging: true
+
+podLabels:
+  app: bifrost
+  env: prod

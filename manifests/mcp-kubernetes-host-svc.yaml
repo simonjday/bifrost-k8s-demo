@@ -1,0 +1,32 @@
+# mcp-kubernetes-host-svc.yaml
+# Exposes the kubernetes-mcp-server SSE process running on the Mac host
+# as an in-cluster Service so Bifrost pods can reach it via ClusterIP DNS.
+#
+# The Mac's LAN IP (192.168.1.21) is reachable from inside k3d pods via
+# the Docker Desktop LinuxKit VM network.
+# Update the IP if your Mac's LAN IP changes (DHCP).
+#
+# Usage: kubectl apply -f mcp-kubernetes-host-svc.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-kubernetes-sse
+  namespace: ai-gateway
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8811
+    targetPort: 8811
+    protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: mcp-kubernetes-sse
+  namespace: ai-gateway
+subsets:
+- addresses:
+  - ip: 192.168.1.21      # Mac LAN IP — update if DHCP changes this
+  ports:
+  - port: 8811

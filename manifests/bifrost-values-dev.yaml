@@ -1,0 +1,16 @@
+# bifrost-values-dev.yaml
+# Minimal k3d dev install — SQLite, single replica, ephemeral storage
+# Usage: helm install bifrost bifrost/bifrost -n ai-gateway -f bifrost-values-dev.yaml
+
+image:
+  tag: v1.4.24
+
+bifrost:
+  encryptionKeySecret:
+    name: bifrost-encryption-key
+    key: encryption-key
+
+# Required if cluster enforces pod label policies (e.g. Kyverno require-pod-labels)
+podLabels:
+  app: bifrost
+  env: dev
