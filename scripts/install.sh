@@ -157,9 +157,9 @@ if [[ "$CLUSTER_TYPE" == "k3d" ]]; then
   echo "    Run: $KUBECTL -n $NS port-forward svc/bifrost 8080:8080 &"
   PF_PORT=8080
 else
-  echo "    Run: $KUBECTL -n $NS port-forward svc/bifrost 8081:8080 &"
-  echo "    (using 8081 to avoid conflict with k3d on 8080)"
-  PF_PORT=8081
+  echo "    Run: $KUBECTL -n $NS port-forward svc/bifrost 8080:8080 &"
+  echo "    (only run one cluster at a time)"
+  PF_PORT=8080
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
@@ -178,7 +178,7 @@ else
   if [[ "$CLUSTER_TYPE" == "k3d" ]]; then
     echo "     kubectl --context ${CONTEXT:-$(kubectl config current-context)} -n $NS port-forward svc/bifrost 8080:8080 &"
   else
-    echo "     kubectl --context ${CONTEXT:-$(kubectl config current-context)} -n $NS port-forward svc/bifrost 8081:8080 &"
+    echo "     kubectl --context ${CONTEXT:-$(kubectl config current-context)} -n $NS port-forward svc/bifrost 8080:8080 &"
   fi
   echo ""
   echo "  3. Open http://localhost:$PF_PORT and configure:"
