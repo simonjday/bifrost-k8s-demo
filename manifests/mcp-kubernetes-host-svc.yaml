@@ -2,21 +2,25 @@
 # Exposes the kubernetes-mcp-server SSE process running on the Mac host
 # as an in-cluster Service so Bifrost pods can reach it via ClusterIP DNS.
 #
-# The Mac's LAN IP (192.168.1.21) is reachable from inside k3d pods via
-# the Docker Desktop LinuxKit VM network.
-# Update the IP if your Mac's LAN IP changes (DHCP).
+# Uses a headless ClusterIP + manual Endpoints to route traffic to the
+# Mac's LAN IP — reachable from k3d pods via the Docker bridge network.
 #
-# Usage: kubectl apply -f mcp-kubernetes-host-svc.yaml
+# NOTE: The Mac IP is injected at apply-time by start-mcp-server.sh.
+#       Do not edit the IP here directly — update HOST_IP in that script,
+#       or let the script auto-detect it via `ipconfig getifaddr en0`.
 
 apiVersion: v1
 kind: Service
 metadata:
   name: mcp-kubernetes-sse
   namespace: ai-gateway
+  labels:
+    app: mcp-kubernetes-sse
 spec:
   type: ClusterIP
   ports:
-  - port: 8811
+  - name: sse
+    port: 8811
     targetPort: 8811
     protocol: TCP
 ---
@@ -25,8 +29,11 @@ kind: Endpoints
 metadata:
   name: mcp-kubernetes-sse
   namespace: ai-gateway
+  labels:
+    app: mcp-kubernetes-sse
 subsets:
 - addresses:
-  - ip: 192.168.1.21      # Mac LAN IP — update if DHCP changes this
+  - ip: __HOST_IP__        # replaced by start-mcp-server.sh at apply-time
   ports:
   - port: 8811
+    protocol: TCP

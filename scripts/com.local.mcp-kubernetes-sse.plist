@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist -->
+<plist version="1.0">
+<dict>
+
+  <key>Label</key>
+  <string>com.local.mcp-kubernetes-sse</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/npx</string>
+    <string>-y</string>
+    <string>kubernetes-mcp-server@latest</string>
+    <string>--port</string>
+    <string>8811</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/simonjday</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/opt/kubernetes-cli@1.33/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>KUBECONFIG</key>
+    <string>/Users/simonjday/.kube/config</string>
+    <key>ENABLE_UNSAFE_SSE_TRANSPORT</key>
+    <string>1</string>
+    <key>PORT</key>
+    <string>8811</string>
+    <key>HOST</key>
+    <string>0.0.0.0</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/mcp-kubernetes-sse.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/mcp-kubernetes-sse.err</string>
+
+</dict>
+</plist>

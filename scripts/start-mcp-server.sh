@@ -1,33 +1,53 @@
-#!/usr/bin/env zsh
-# start-mcp-server.sh — Start kubernetes-mcp-server in SSE mode on port 8811
-# This exposes the MCP server over HTTP so Bifrost pods can connect to it
-# via the mcp-kubernetes-sse Service + Endpoints in-cluster.
-#
-# IMPORTANT: Use kubernetes-mcp-server (Red Hat), NOT mcp-server-kubernetes (Flux159).
-# The Flux159 package only supports a single concurrent connection and crashes
-# when Bifrost holds a persistent SSE connection.
+#!/usr/bin/env bash
+set -euo pipefail
 
-pkill -f "kubernetes-mcp-server" 2>/dev/null || true
-pkill -f "mcp-server-kubernetes" 2>/dev/null || true
+PORT=8811
+MANIFEST_DIR="$(cd "$(dirname "$0")/../manifests" && pwd)"
+MANIFEST="$MANIFEST_DIR/mcp-kubernetes-host-svc.yaml"
+
+# ── 1. Detect Mac LAN IP ────────────────────────────────────────────────────
+HOST_IP=$(ipconfig getifaddr en0 2>/dev/null || true)
+if [[ -z "$HOST_IP" ]]; then
+  HOST_IP=$(ipconfig getifaddr en1 2>/dev/null || true)
+fi
+if [[ -z "$HOST_IP" ]]; then
+  echo "ERROR: Could not detect Mac LAN IP via en0/en1. Set HOST_IP manually." >&2
+  exit 1
+fi
+
+echo "Detected Mac LAN IP: $HOST_IP"
+
+# ── 2. Apply Service + Endpoints manifest (with IP substituted) ─────────────
+echo "Applying MCP Kubernetes SSE service manifest..."
+sed "s/__HOST_IP__/$HOST_IP/" "$MANIFEST" | kubectl apply -f -
+echo "Service mcp-kubernetes-sse → $HOST_IP:$PORT applied."
+
+# ── 3. Start the MCP server ──────────────────────────────────────────────────
+# --port starts both /sse and /mcp endpoints (no --transport flag in this version)
+echo ""
+echo "Starting kubernetes-mcp-server on port $PORT..."
+npx -y kubernetes-mcp-server@latest --port "$PORT" &
+MCP_PID=$!
+
+# Give it a moment to bind
 sleep 1
 
-echo "Starting kubernetes-mcp-server on port 8811..."
-
-ENABLE_UNSAFE_SSE_TRANSPORT=1 \
-PORT=8811 \
-HOST=0.0.0.0 \
-npx -y kubernetes-mcp-server@latest &
-
-sleep 3
-
+# ── 4. Verify SSE endpoint is up ────────────────────────────────────────────
 echo "Verifying SSE endpoint..."
-curl -s --max-time 3 http://localhost:8811/sse; echo ""
+if curl -sf --max-time 3 "http://localhost:$PORT/sse" -o /dev/null; then
+  echo "SSE server running on http://0.0.0.0:$PORT"
+else
+  echo "WARNING: SSE endpoint did not respond — server may still be starting."
+fi
+
 echo ""
-echo "SSE server running on http://0.0.0.0:8811"
-echo "Reachable from k3d pods at: http://192.168.1.21:8811/sse"
+echo "Reachable from k3d pods at: http://$HOST_IP:$PORT/sse"
 echo ""
 echo "Register in Bifrost UI → MCP → New MCP Server:"
 echo "  Name:            kubernetes_local"
 echo "  Connection Type: Server-Sent Events (SSE)"
-echo "  URL:             http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse"
+echo "  URL:             http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:$PORT/sse"
 echo "  Auth:            None"
+echo ""
+echo "Press Ctrl+C to stop the MCP server."
+wait "$MCP_PID"
