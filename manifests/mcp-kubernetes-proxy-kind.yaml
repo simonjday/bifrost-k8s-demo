@@ -1,0 +1,66 @@
+# mcp-kubernetes-proxy-kind.yaml
+# Required for kind clusters ONLY. Not needed for k3d.
+#
+# kind pods cannot route to the Mac's LAN IP (192.168.1.x) directly because
+# kind nodes run inside Docker Desktop's LinuxKit VM. This socat Deployment
+# runs inside the cluster and proxies MCP SSE traffic to the Mac host via
+# 192.168.65.254 (host.docker.internal), which IS reachable from kind pods.
+#
+# Architecture:
+#   bifrost-0 → mcp-kubernetes-sse Service → mcp-kubernetes-proxy pod
+#             → socat → 192.168.65.254:8811 → Mac MCP server
+#
+# Usage: kubectl apply -f manifests/mcp-kubernetes-proxy-kind.yaml
+#
+# After applying, also apply mcp-kubernetes-svc-kind.yaml to update
+# the Service selector to point at this proxy instead of the Endpoints.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-kubernetes-proxy
+  namespace: ai-gateway
+  labels:
+    app: mcp-kubernetes-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-kubernetes-proxy
+  template:
+    metadata:
+      labels:
+        app: mcp-kubernetes-proxy
+    spec:
+      containers:
+      - name: socat
+        image: alpine/socat:latest
+        args:
+        - TCP-LISTEN:8811,fork,reuseaddr
+        - TCP:192.168.65.254:8811   # host.docker.internal — reachable from kind pods
+        ports:
+        - containerPort: 8811
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-kubernetes-sse
+  namespace: ai-gateway
+  labels:
+    app: mcp-kubernetes-sse
+spec:
+  type: ClusterIP
+  selector:
+    app: mcp-kubernetes-proxy   # routes to socat proxy pod (kind only)
+  ports:
+  - name: sse
+    port: 8811
+    targetPort: 8811
+    protocol: TCP
