@@ -3,7 +3,7 @@
 # Usage: helm install bifrost bifrost/bifrost -n ai-gateway -f bifrost-values-prod.yaml
 
 image:
-  tag: v1.4.24
+  tag: v1.5.0-prerelease7
 
 replicaCount: 3
 
@@ -49,3 +49,18 @@ bifrost:
 podLabels:
   app: bifrost
   env: prod
+
+# ── kube-prometheus-stack sub-chart overrides ─────────────────────────────────
+# In production (real cluster), control plane components are reachable so
+# these are enabled. Comment out or set to false if deploying to kind/k3d.
+kubeControllerManager:
+  enabled: true
+
+kubeScheduler:
+  enabled: true
+
+kubeProxy:
+  enabled: true
+
+kubeEtcd:
+  enabled: true

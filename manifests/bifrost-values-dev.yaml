@@ -1,9 +1,9 @@
 # bifrost-values-dev.yaml
-# Minimal k3d dev install — SQLite, single replica, ephemeral storage
+# Minimal kind/k3d dev install — SQLite, single replica, ephemeral storage
 # Usage: helm install bifrost bifrost/bifrost -n ai-gateway -f bifrost-values-dev.yaml
 
 image:
-  tag: v1.4.24
+  tag: v1.5.0-prerelease7
 
 bifrost:
   encryptionKeySecret:
@@ -14,3 +14,19 @@ bifrost:
 podLabels:
   app: bifrost
   env: dev
+
+# ── kube-prometheus-stack sub-chart overrides ─────────────────────────────────
+# Disable control plane component scraping — these components bind to 127.0.0.1
+# in kind/k3d clusters and are unreachable from Prometheus pods. Disabling them
+# removes the permanently-failing targets from the Prometheus targets page.
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
