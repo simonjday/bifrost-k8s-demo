@@ -248,8 +248,42 @@ curl -s -X POST http://localhost:8080/v1/chat/completions \
 | MCP SSE URL (in-cluster) | `http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse` |
 | MCP SSE URL (local) | `http://localhost:8811/sse` |
 
+## After Restarting the kind Cluster
+
+The kind API server port is dynamic and changes on every cluster restart. Both the
+Launch Agent SSE server and Claude Desktop cache the kubeconfig at startup — they must
+be restarted whenever kind is stopped and restarted.
+
+```bash
+# 1. Restart the Launch Agent (reloads kubeconfig with new API port)
+launchctl stop com.local.mcp-kubernetes-sse
+launchctl start com.local.mcp-kubernetes-sse
+
+# 2. Restart Claude Desktop (reloads its stdio MCP instance)
+osascript -e 'quit app "Claude"'
+sleep 3
+open -a Claude
+
+# 3. Re-apply port-forward
+kubectl --context kind-devops-lab port-forward -n ai-gateway svc/bifrost 8080:8080 &
+
+# 4. Verify everything is healthy
+curl -s http://localhost:8080/api/mcp/clients | jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
+```
+
 ## Known Gotchas
 
+- **Restart Launch Agent + Claude Desktop after kind cluster restart** — the kind API
+  server port changes on every restart. Both processes cache kubeconfig at startup and
+  will fail with `RESOURCE_NOT_FOUND` errors until restarted. See "After Restarting
+  the kind Cluster" above.
+- **`pods_top` fails with `RESOURCE_NOT_FOUND`** — either Metrics Server isn't installed
+  (run `./scripts/install.sh --apply`) or the MCP server has a stale kubeconfig (restart
+  the Launch Agent). Confirmed working via curl does not mean the Claude Desktop MCP
+  instance is also working — they are separate processes.
+- **Use single-line curl for MCP calls** — zsh parse errors occur when pasting multi-line
+  curl blocks with comments (`#`) inline. Always use single-line format:
+  `curl -s -X POST ... -d '{"jsonrpc":"2.0",...}'`
 - **Tool name format is `kubernetes_local-<tool>`** — underscore in client name, hyphen
   separator. Use `tools/list` to discover exact names before calling.
 - **No `x-bf-mcp-include-clients` header needed** — tool names are prefixed so Bifrost
