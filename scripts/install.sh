@@ -1,16 +1,30 @@
 #!/usr/bin/env zsh
-# install.sh — Full Bifrost + MCP install on k3d
+# install.sh — Full Bifrost + MCP install on k3d or kind
 # Dry-run by default. Pass --apply to execute.
-# Usage: ./scripts/install.sh [--apply]
+# Usage: ./scripts/install.sh [--apply] [--context <kubectl-context>]
+#
+# Auto-detects cluster type (k3d vs kind) and applies the correct MCP networking:
+#   k3d  → ClusterIP + manual Endpoints (Mac LAN IP 192.168.1.21)
+#   kind → socat proxy Deployment (forwards via 192.168.65.254 / host.docker.internal)
 
 set -euo pipefail
 
 DRY_RUN=true
-[[ "${1:-}" == "--apply" ]] && DRY_RUN=false
+CONTEXT=""
+
+# Parse args
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --apply)   DRY_RUN=false; shift ;;
+    --context) CONTEXT="$2"; shift 2 ;;
+    *)         echo "Unknown arg: $1"; exit 1 ;;
+  esac
+done
 
 NS="ai-gateway"
-BIFROST_VERSION="v1.4.24"
+BIFROST_VERSION="v1.5.0-prerelease7"
 HELM_CHART_REPO="https://maximhq.github.io/bifrost/helm-charts"
+KUBECTL="kubectl${CONTEXT:+ --context $CONTEXT}"
 
 run() {
   if $DRY_RUN; then
@@ -20,58 +34,135 @@ run() {
   fi
 }
 
-echo "==> Bifrost k3d Install"
-echo "    Namespace: $NS"
-echo "    Version:   $BIFROST_VERSION"
-echo "    Dry-run:   $DRY_RUN"
+# ── Detect cluster type ───────────────────────────────────────────────────────
+detect_cluster_type() {
+  local ctx="${CONTEXT:-$(kubectl config current-context 2>/dev/null)}"
+  if [[ "$ctx" == k3d-* ]]; then
+    echo "k3d"
+  elif [[ "$ctx" == kind-* ]]; then
+    echo "kind"
+  else
+    # Fallback: check server URL pattern
+    local server
+    server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)
+    if [[ "$server" == *"6443"* ]]; then
+      echo "k3d"
+    else
+      echo "kind"
+    fi
+  fi
+}
+
+CLUSTER_TYPE=$(detect_cluster_type)
+
+echo "==> Bifrost Install"
+echo "    Namespace:    $NS"
+echo "    Version:      $BIFROST_VERSION"
+echo "    Context:      ${CONTEXT:-$(kubectl config current-context)}"
+echo "    Cluster type: $CLUSTER_TYPE"
+echo "    Dry-run:      $DRY_RUN"
 echo ""
 
-# 1. Add Helm repo
+# ── Step 1: Helm repo ─────────────────────────────────────────────────────────
 echo "--- Step 1: Helm repo"
 run "helm repo add bifrost $HELM_CHART_REPO 2>/dev/null || true"
 run "helm repo update"
 
-# 2. Namespace
+# ── Step 2: Namespace ─────────────────────────────────────────────────────────
 echo "--- Step 2: Namespace"
-run "kubectl create namespace $NS --dry-run=client -o yaml | kubectl apply -f -"
+run "$KUBECTL create namespace $NS --dry-run=client -o yaml | $KUBECTL apply -f -"
 
-# 3. Encryption key secret (mandatory — chart won't start without it)
+# ── Step 3: Encryption key secret ────────────────────────────────────────────
 echo "--- Step 3: Encryption key secret"
-if ! kubectl -n $NS get secret bifrost-encryption-key &>/dev/null; then
-  run "kubectl create secret generic bifrost-encryption-key \
+if ! $DRY_RUN && $KUBECTL -n $NS get secret bifrost-encryption-key &>/dev/null; then
+  echo "    Secret already exists — skipping"
+else
+  run "$KUBECTL create secret generic bifrost-encryption-key \
     --namespace $NS \
     --from-literal=encryption-key=\"\$(openssl rand -base64 32)\""
-else
-  echo "    Secret already exists — skipping"
 fi
 
-# 4. Install Bifrost via Helm
+# ── Step 4: Bifrost Helm install ──────────────────────────────────────────────
 echo "--- Step 4: Bifrost Helm install"
-if helm -n $NS status bifrost &>/dev/null; then
+if ! $DRY_RUN && helm ${CONTEXT:+--kube-context $CONTEXT} -n $NS status bifrost &>/dev/null; then
   echo "    Release already installed — upgrading"
-  run "helm upgrade bifrost bifrost/bifrost \
+  run "helm ${CONTEXT:+--kube-context $CONTEXT} upgrade bifrost bifrost/bifrost \
     --namespace $NS \
     -f manifests/bifrost-values-dev.yaml"
 else
-  run "helm install bifrost bifrost/bifrost \
+  run "helm ${CONTEXT:+--kube-context $CONTEXT} install bifrost bifrost/bifrost \
     --namespace $NS \
     -f manifests/bifrost-values-dev.yaml"
 fi
 
-# 5. MCP host service
-echo "--- Step 5: MCP host Service + Endpoints"
-run "kubectl apply -f manifests/mcp-kubernetes-host-svc.yaml"
+# ── Step 5: MCP networking ────────────────────────────────────────────────────
+echo "--- Step 5: MCP host networking ($CLUSTER_TYPE)"
 
-# 6. Wait for Bifrost to be ready
+if [[ "$CLUSTER_TYPE" == "k3d" ]]; then
+  echo "    Applying ClusterIP + Endpoints (Mac LAN IP) for k3d..."
+  run "$KUBECTL apply -f manifests/mcp-kubernetes-host-svc.yaml"
+
+elif [[ "$CLUSTER_TYPE" == "kind" ]]; then
+  echo "    Applying socat proxy Deployment + Service for kind..."
+  run "$KUBECTL apply -f manifests/mcp-kubernetes-proxy-kind.yaml"
+
+  # Clean up any stale manual EndpointSlices — they conflict with the
+  # controller-managed one and break kube-proxy routing
+  echo "    Cleaning up stale manual EndpointSlices..."
+  if ! $DRY_RUN; then
+    # Delete any EndpointSlice named exactly 'mcp-kubernetes-sse' (manual ones
+    # have no pod-template-hash suffix; controller-managed ones do)
+    if $KUBECTL -n $NS get endpointslice mcp-kubernetes-sse &>/dev/null; then
+      $KUBECTL -n $NS delete endpointslice mcp-kubernetes-sse && \
+        echo "    Deleted stale EndpointSlice mcp-kubernetes-sse" || true
+    else
+      echo "    No stale EndpointSlice found — OK"
+    fi
+  else
+    echo "[DRY-RUN] kubectl -n $NS delete endpointslice mcp-kubernetes-sse (if exists)"
+  fi
+fi
+
+# ── Step 6: Wait for Bifrost ──────────────────────────────────────────────────
 echo "--- Step 6: Wait for Bifrost pod"
 if ! $DRY_RUN; then
-  kubectl -n $NS rollout status statefulset/bifrost --timeout=120s
+  $KUBECTL -n $NS rollout status statefulset/bifrost --timeout=120s
+
+  if [[ "$CLUSTER_TYPE" == "kind" ]]; then
+    echo "    Waiting for socat proxy pod..."
+    $KUBECTL -n $NS rollout status deployment/mcp-kubernetes-proxy --timeout=60s
+  fi
 fi
 
-# 7. Port-forward
-echo "--- Step 7: Port-forward"
-echo "    Run manually: kubectl -n $NS port-forward svc/bifrost 8080:8080 &"
+# ── Step 7: Verify MCP connectivity ──────────────────────────────────────────
+echo "--- Step 7: Verify MCP connectivity"
+if ! $DRY_RUN; then
+  BIFROST_POD=$($KUBECTL -n $NS get pod -l app=bifrost -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "bifrost-0")
+  echo "    Testing from pod $BIFROST_POD..."
+  if $KUBECTL -n $NS exec "$BIFROST_POD" -- \
+      wget -qO- --timeout=5 http://mcp-kubernetes-sse.${NS}.svc.cluster.local:8811/healthz &>/dev/null; then
+    echo "    ✓ MCP SSE endpoint reachable in-cluster"
+  else
+    echo "    ✗ MCP SSE endpoint not reachable — check logs:"
+    echo "      tail -f /tmp/mcp-kubernetes-sse.err"
+    if [[ "$CLUSTER_TYPE" == "kind" ]]; then
+      echo "      $KUBECTL -n $NS logs deploy/mcp-kubernetes-proxy"
+    fi
+  fi
+fi
 
+# ── Step 8: Port-forward info ─────────────────────────────────────────────────
+echo "--- Step 8: Port-forward"
+if [[ "$CLUSTER_TYPE" == "k3d" ]]; then
+  echo "    Run: $KUBECTL -n $NS port-forward svc/bifrost 8080:8080 &"
+  PF_PORT=8080
+else
+  echo "    Run: $KUBECTL -n $NS port-forward svc/bifrost 8081:8080 &"
+  echo "    (using 8081 to avoid conflict with k3d on 8080)"
+  PF_PORT=8081
+fi
+
+# ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 if $DRY_RUN; then
   echo "Dry-run complete. Re-run with --apply to execute."
@@ -79,13 +170,30 @@ else
   echo "Install complete."
   echo ""
   echo "Next steps:"
-  echo "  1. kubectl -n $NS port-forward svc/bifrost 8080:8080 &"
-  echo "  2. ./scripts/start-mcp-server.sh"
-  echo "  3. Open http://localhost:8080 and configure:"
+  echo "  1. Start MCP server (if not already running via Launch Agent):"
+  echo "     launchctl list com.local.mcp-kubernetes-sse || \\"
+  echo "       launchctl load -w ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist"
+  echo ""
+  echo "  2. Port-forward Bifrost:"
+  if [[ "$CLUSTER_TYPE" == "k3d" ]]; then
+    echo "     kubectl --context ${CONTEXT:-$(kubectl config current-context)} -n $NS port-forward svc/bifrost 8080:8080 &"
+  else
+    echo "     kubectl --context ${CONTEXT:-$(kubectl config current-context)} -n $NS port-forward svc/bifrost 8081:8080 &"
+  fi
+  echo ""
+  echo "  3. Open http://localhost:$PF_PORT and configure:"
   echo "     - Providers: Add Anthropic key"
-  echo "     - Providers: Add OpenAI provider with base_url http://192.168.1.21:11434"
-  echo "     - MCP: Add kubernetes_local server"
-  echo "     - Keys: Create virtual key with allowed tools"
-  echo "  4. export BIFROST_VIRTUAL_KEY=<your-key>"
-  echo "  5. ./demos/01-governance-block.sh"
+  echo "     - Providers: Add OpenAI provider pointing to Ollama:"
+  echo "       base_url: http://192.168.1.21:11434"
+  echo "     - MCP: Add kubernetes_local server:"
+  echo "       URL: http://mcp-kubernetes-sse.${NS}.svc.cluster.local:8811/sse"
+  echo "       Type: SSE, Auth: None"
+  echo "     - Keys: Create virtual key"
+  echo ""
+  echo "  4. Verify MCP connected:"
+  echo "     curl -s http://localhost:$PF_PORT/api/mcp/clients | \\"
+  echo "       jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'"
+  echo ""
+  echo "  5. export BIFROST_VIRTUAL_KEY=<your-key>"
+  echo "  6. ./demos/01-governance-block.sh"
 fi
