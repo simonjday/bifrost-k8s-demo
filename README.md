@@ -8,7 +8,8 @@ A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/
 bifrost-k8s-demo/
 ├── README.md                                  # This file
 ├── docs/
-│   ├── bifrost-analysis.md                    # In-depth Bifrost architecture and feature analysis
+│   └── network-flow.svg                           # MCP network flow diagram (k3d + kind)
+
 │   ├── demo-guide.md                          # Complete demo playbook (10 demos, pre-reqs, curl commands)
 │   └── gateway-comparison.md                  # Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone
 ├── manifests/
@@ -115,6 +116,17 @@ Mac Host
         │           (Docker host gateway — reachable from kind)  │
         └── openai provider → 192.168.65.254:11434 ────────────►┘
 ```
+
+## Network Flow
+
+![MCP network flow diagram](docs/network-flow.svg)
+
+The diagram above shows the full request path for both cluster types:
+
+- **k3d** — Bifrost pod → `mcp-kubernetes-sse` Service → Endpoints (`192.168.1.21`) → Mac MCP server. k3d pods can reach the Mac's LAN IP directly via the Docker bridge.
+- **kind** — Bifrost pod → `mcp-kubernetes-sse` Service → `mcp-kubernetes-proxy` pod (socat) → `192.168.65.254` (`host.docker.internal`) → Mac MCP server. kind pods cannot reach the Mac LAN IP so traffic is proxied.
+- **Claude Desktop** uses a separate stdio instance of `kubernetes-mcp-server` — independent of the SSE server above.
+- **curl / LLM clients** reach Bifrost via `kubectl port-forward` on `localhost:8080`.
 
 ## MCP Server — Launch Agent Setup
 
