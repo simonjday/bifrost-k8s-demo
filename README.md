@@ -50,7 +50,7 @@ git clone https://github.com/simonjday/bifrost-k8s-demo.git
 cd bifrost-k8s-demo
 
 # 2. Run the install script
-./scripts/install.sh
+./scripts/install.sh --apply
 
 # 3. Start the MCP server
 ./scripts/start-mcp-server.sh
