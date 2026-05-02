@@ -123,8 +123,41 @@ elif [[ "$CLUSTER_TYPE" == "kind" ]]; then
   fi
 fi
 
-# ── Step 6: Wait for Bifrost ──────────────────────────────────────────────────
-echo "--- Step 6: Wait for Bifrost pod"
+
+# ── Step 6: Metrics Server ───────────────────────────────────────────────────
+echo "--- Step 6: Metrics Server (required for pods_top / nodes_top)"
+
+METRICS_URL="https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml"
+
+if ! $DRY_RUN; then
+  if $KUBECTL -n kube-system get deployment metrics-server &>/dev/null; then
+    echo "    Metrics Server already installed — skipping"
+  else
+    echo "    Installing Metrics Server..."
+    $KUBECTL apply -f "$METRICS_URL"
+
+    if [[ "$CLUSTER_TYPE" == "kind" ]]; then
+      # kind uses self-signed kubelet certs — patch to skip TLS verification
+      echo "    Patching for kind (--kubelet-insecure-tls)..."
+      $KUBECTL patch deployment metrics-server -n kube-system \
+        --type=json \
+        -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+    fi
+
+    echo "    Waiting for Metrics Server to be ready (up to 90s)..."
+    $KUBECTL -n kube-system rollout status deployment/metrics-server --timeout=90s && \
+      echo "    ✓ Metrics Server ready" || \
+      echo "    ✗ Metrics Server not ready — pods_top may fail for a few minutes"
+  fi
+else
+  echo "[DRY-RUN] kubectl apply -f $METRICS_URL"
+  if [[ "$CLUSTER_TYPE" == "kind" ]]; then
+    echo "[DRY-RUN] kubectl patch deployment metrics-server -n kube-system (--kubelet-insecure-tls)"
+  fi
+fi
+
+# ── Step 7: Wait for Bifrost ──────────────────────────────────────────────────
+echo "--- Step 7: Wait for Bifrost pod"
 if ! $DRY_RUN; then
   $KUBECTL -n $NS rollout status statefulset/bifrost --timeout=120s
 
@@ -134,8 +167,8 @@ if ! $DRY_RUN; then
   fi
 fi
 
-# ── Step 7: Verify MCP connectivity ──────────────────────────────────────────
-echo "--- Step 7: Verify MCP connectivity"
+# ── Step 8: Verify MCP connectivity ──────────────────────────────────────────
+echo "--- Step 8: Verify MCP connectivity"
 if ! $DRY_RUN; then
   BIFROST_POD=$($KUBECTL -n $NS get pod -l app=bifrost -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "bifrost-0")
   echo "    Testing from pod $BIFROST_POD..."
@@ -151,8 +184,8 @@ if ! $DRY_RUN; then
   fi
 fi
 
-# ── Step 8: Port-forward info ─────────────────────────────────────────────────
-echo "--- Step 8: Port-forward"
+# ── Step 9: Port-forward info ─────────────────────────────────────────────────
+echo "--- Step 9: Port-forward"
 if [[ "$CLUSTER_TYPE" == "k3d" ]]; then
   echo "    Run: $KUBECTL -n $NS port-forward svc/bifrost 8080:8080 &"
   PF_PORT=8080
