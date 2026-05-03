@@ -8,10 +8,16 @@ A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/
 bifrost-k8s-demo/
 ├── README.md                                  # This file
 ├── docs/
-│   └── network-flow.svg                           # MCP network flow diagram (k3d + kind)
-
+│   ├── network-flow.svg                       # MCP network flow diagram (k3d + kind)
 │   ├── demo-guide.md                          # Complete demo playbook (10 demos, pre-reqs, curl commands)
-│   └── gateway-comparison.md                  # Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone
+│   ├── gateway-comparison.md                  # Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone
+│   ├── bifrost-openwebui-demo-scenarios.md    # Step-by-step Open WebUI demo scenarios
+│   └── screenshots/                           # Demo screenshots (PNG)
+│       ├── owui-model-selector.png
+│       ├── owui-basic-chat.png
+│       ├── owui-model-comparison.png
+│       ├── bifrost-logs.png
+│       └── bifrost-access-control.png
 ├── manifests/
 │   ├── namespace.yaml                         # ai-gateway namespace
 │   ├── bifrost-values-dev.yaml                # Helm values for local k3d dev install
@@ -63,7 +69,7 @@ cp scripts/com.local.mcp-kubernetes-sse.plist ~/Library/LaunchAgents/
 launchctl load -w ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 
 # 4. Port-forward Bifrost
-kubectl port-forward -n ai-gateway svc/bifrost 8080:8080 &
+kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &
 
 # 5. Register the MCP server in Bifrost UI → MCP → New MCP Server:
 #   Name:            kubernetes_local
@@ -231,6 +237,87 @@ curl -s -X POST http://localhost:8080/v1/chat/completions \
   }'
 ```
 
+## Local LLM Demo — Open WebUI via Bifrost
+
+All local Ollama models are accessible through a single Bifrost gateway endpoint,
+with a real user-facing chat interface via [Open WebUI](https://github.com/open-webui/open-webui).
+Every message routes through Bifrost to Ollama running on the Mac host — nothing leaves the machine.
+
+> Full step-by-step demo scenarios: [docs/bifrost-openwebui-demo-scenarios.md](docs/bifrost-openwebui-demo-scenarios.md)
+
+### Quick Start — Open WebUI
+
+```bash
+docker run -d \
+  --name open-webui \
+  -p 3001:8080 \
+  -e OPENAI_API_BASE_URL=http://host.docker.internal:8080/v1 \
+  -e OPENAI_API_KEY=$BIFROST_VIRTUAL_KEY \
+  -v open-webui:/app/backend/data \
+  --restart always \
+  ghcr.io/open-webui/open-webui:main
+```
+
+Open `http://localhost:3001` — port `3000` is used by Grafana in this environment.
+
+### Request Flow
+
+```
+Browser
+  └── Open WebUI :3001
+        └── POST /v1/chat/completions
+              └── Bifrost :8080 (port-forward)
+                    └── Ollama :11434 (Mac host)
+                          └── openai/qwen2.5:7b (local model)
+```
+
+---
+
+### Model Selection
+
+All models registered in Bifrost appear in the Open WebUI model dropdown,
+prefixed with `openai/` to indicate the provider type.
+
+![Open WebUI model selector showing available Ollama models](docs/screenshots/owui-model-selector.png)
+
+---
+
+### Chat Interface
+
+Users interact with local Ollama models through a familiar chat interface.
+The model name is shown in the header — responses stream in real time via Bifrost.
+
+![Open WebUI chat with qwen2.5:7b response](docs/screenshots/owui-basic-chat.png)
+
+---
+
+### Multi-Model Comparison
+
+Open WebUI supports running multiple models in parallel on the same prompt.
+Select two models using the **+** icon next to the model selector.
+
+![Side by side comparison of qwen2.5:7b and llama3.2:3b](docs/screenshots/owui-model-comparison.png)
+
+---
+
+### Audit Trail
+
+Every request through Bifrost is logged with provider, model, latency, and token counts.
+Visible in the Bifrost UI at `http://localhost:8080/logs` — including requests from Open WebUI.
+
+![Bifrost logs showing requests from Open WebUI](docs/screenshots/bifrost-logs.png)
+
+---
+
+### Access Control
+
+Virtual keys enforce model-level access control. Requests to unauthorised models
+are rejected at the gateway before reaching Ollama.
+
+![403 response from Bifrost for blocked model access](docs/screenshots/bifrost-access-control.png)
+
+---
+
 ## Key Configuration Facts
 
 | Item | Value |
@@ -247,6 +334,7 @@ curl -s -X POST http://localhost:8080/v1/chat/completions \
 | Ollama base URL (kind) | `http://192.168.65.254:11434` (no `/v1` suffix) |
 | MCP SSE URL (in-cluster) | `http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse` |
 | MCP SSE URL (local) | `http://localhost:8811/sse` |
+| Open WebUI | http://localhost:3001 |
 
 ## After Restarting the kind Cluster
 
@@ -265,7 +353,7 @@ sleep 3
 open -a Claude
 
 # 3. Re-apply port-forward
-kubectl --context kind-devops-lab port-forward -n ai-gateway svc/bifrost 8080:8080 &
+kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &
 
 # 4. Verify everything is healthy
 curl -s http://localhost:8080/api/mcp/clients | jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
@@ -296,6 +384,8 @@ curl -s http://localhost:8080/api/mcp/clients | jq '{state: .clients[0].state, t
 - **`--port` flag only, no `--transport`** — `ENABLE_UNSAFE_SSE_TRANSPORT=1` env var required.
 - **Claude Desktop runs its own stdio instance** — separate from the SSE Launch Agent, do not
   change `claude_desktop_config.json`.
+- **Open WebUI on port 3001** — port 3000 is used by Grafana. Use `host.docker.internal`
+  (not `localhost`) for `OPENAI_API_BASE_URL` inside the Docker container.
 - Helm install issues (Kyverno label enforcement, encryption key secret, stale releases)
 - Ollama provider registration (use `openai` type, no `/v1` in base URL)
 - Agent mode: `tools_to_auto_execute` set on MCP client in Bifrost UI, not a request header
@@ -309,11 +399,13 @@ curl -s http://localhost:8080/api/mcp/clients | jq '{state: .clients[0].state, t
 | k3d cluster | k3d-demo, k3s v1.33.x |
 | kind cluster | kind-devops-lab, k8s v1.33.x |
 | Docker Desktop | Mac (kind host gateway: 192.168.65.254) |
-| Ollama models | qwen2.5:7b, qwen3-coder:30b, llama3.2:3b, qwen2.5-coder:7b, gemma4:latest |
+| Ollama models | qwen2.5:7b, qwen3-coder:30b, llama3.2:3b, qwen2.5-coder:7b, qwen2.5-coder:1.5b-base, gemma4:latest |
 | Anthropic | claude-sonnet-4-5-20250929 |
+| Open WebUI | latest (ghcr.io/open-webui/open-webui:main) |
 
 ## Docs
 
 - [Bifrost In-Depth Analysis](docs/bifrost-analysis.md)
 - [Demo Guide](docs/demo-guide.md)
 - [AI Gateway Comparison](docs/gateway-comparison.md)
+- [Open WebUI Demo Scenarios](docs/bifrost-openwebui-demo-scenarios.md)
