@@ -1,6 +1,6 @@
-# Bifrost AI Gateway — k3d Demo
+# Bifrost AI Gateway — Local Cluster Demo
 
-A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/bifrost) on a local k3d cluster, including Kubernetes MCP tool integration, Ollama local model support, and governed agentic workflows.
+A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/bifrost) on a local k3d or kind cluster, including Kubernetes MCP tool integration, Ollama local model support, and governed agentic workflows.
 
 ## What This Repo Contains
 
@@ -9,7 +9,7 @@ bifrost-k8s-demo/
 ├── README.md                                  # This file
 ├── docs/
 │   ├── network-flow.svg                       # MCP network flow diagram (k3d + kind)
-│   ├── demo-guide.md                          # Complete demo playbook (10 demos, pre-reqs, curl commands)
+│   ├── demo-guide.md                          # Complete demo playbook (pre-reqs, curl commands)
 │   ├── gateway-comparison.md                  # Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone
 │   ├── bifrost-openwebui-demo-scenarios.md    # Step-by-step Open WebUI demo scenarios
 │   └── screenshots/                           # Demo screenshots (PNG)
@@ -20,7 +20,7 @@ bifrost-k8s-demo/
 │       └── bifrost-access-control.png
 ├── manifests/
 │   ├── namespace.yaml                         # ai-gateway namespace
-│   ├── bifrost-values-dev.yaml                # Helm values for local k3d dev install
+│   ├── bifrost-values-dev.yaml                # Helm values for local dev install
 │   ├── bifrost-values-prod.yaml               # Helm values for production HA install
 │   ├── mcp-kubernetes-host-svc.yaml           # Service + Endpoints for k3d (Mac LAN IP)
 │   └── mcp-kubernetes-proxy-kind.yaml         # socat proxy Deployment + Service for kind
@@ -31,15 +31,15 @@ bifrost-k8s-demo/
 │   ├── com.local.mcp-kubernetes-sse.plist     # macOS Launch Agent for kubernetes-mcp-server
 │   └── warmup-ollama.sh                       # Pre-warm Ollama models before demo
 └── demos/
-    ├── 01-governance-block.sh                 # Demo 5: Destructive tool blocking
+    ├── 01-basic-routing.sh                    # Demo 1: Single endpoint, multiple models
     ├── 02-cost-attribution.sh                 # Demo 2: Namespace resource consumption
     ├── 03-crashloop-diagnosis.sh              # Demo 3: Pod diagnosis workflow
     ├── 04-argocd-status.sh                    # Demo 4: Argo CD CRD queries
-    ├── 05-kargo-pipeline.sh                   # Demo 6: Kargo stage and freight status
-    ├── 06-lm-triage.sh                        # Demo 7: LLM-driven cluster triage (agent mode)
-    ├── 07-multi-tool-correlation.sh           # Demo 8: Pods + Argo CD + Kargo correlation
-    ├── 08-local-vs-cloud.sh                   # Demo 9: Ollama vs Anthropic comparison
-    └── 09-ollama-fast-query.sh                # Demo 10: Sub-2s local model query
+    ├── 05-governance-block.sh                 # Demo 5: Destructive tool blocking
+    ├── 06-lm-triage.sh                        # Demo 6: LLM-driven cluster triage (agent mode)
+    ├── 07-multi-tool-correlation.sh           # Demo 7: Pods + Argo CD correlation
+    ├── 08-local-vs-cloud.sh                   # Demo 8: Ollama vs Anthropic comparison
+    └── 09-ollama-fast-query.sh                # Demo 9: Sub-2s local model query
 ```
 
 ## Prerequisites
@@ -71,26 +71,27 @@ launchctl load -w ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 # 4. Port-forward Bifrost
 kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &
 
-# 5. Register the MCP server in Bifrost UI → MCP → New MCP Server:
-#   Name:            kubernetes_local
-#   Connection Type: Server-Sent Events (SSE)
-#   URL:             http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse
-#   Auth:            None
+# 5. Export your Bifrost virtual key (get from http://localhost:8080 → Keys)
+export BIFROST_VIRTUAL_KEY="vk_your_key_here"
 
 # 6. Verify Bifrost is connected (should show state: connected, tool_count: 20)
 curl -s http://localhost:8080/api/mcp/clients | \
   jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
 
-# 7. Export your Bifrost virtual key (get from http://localhost:8080 → Keys)
-export BIFROST_VIRTUAL_KEY="vk_your_key_here"
-
-# 8. Run any demo
-./demos/01-governance-block.sh
+# 7. Run any demo
+./demos/01-basic-routing.sh
 ```
+
+> **Note:** After running the install script, register the MCP server manually in the Bifrost UI:
+> **MCP → New MCP Server → Name:** `kubernetes_local` **→ Type:** SSE
+> **→ URL:** `http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse` **→ Auth:** None
+
+---
 
 ## Architecture
 
 ### k3d
+
 ```
 Mac Host
 ├── Ollama (0.0.0.0:11434) ──────────────────────────────────┐
@@ -107,6 +108,7 @@ Mac Host
 ```
 
 ### kind
+
 ```
 Mac Host
 ├── Ollama (0.0.0.0:11434) ──────────────────────────────────┐
@@ -123,21 +125,20 @@ Mac Host
         └── openai provider → 192.168.65.254:11434 ────────────►┘
 ```
 
-## Network Flow
+### Network Flow
 
 ![MCP network flow diagram](docs/network-flow.svg)
 
-The diagram above shows the full request path for both cluster types:
-
-- **k3d** — Bifrost pod → `mcp-kubernetes-sse` Service → Endpoints (`192.168.1.21`) → Mac MCP server. k3d pods can reach the Mac's LAN IP directly via the Docker bridge.
-- **kind** — Bifrost pod → `mcp-kubernetes-sse` Service → `mcp-kubernetes-proxy` pod (socat) → `192.168.65.254` (`host.docker.internal`) → Mac MCP server. kind pods cannot reach the Mac LAN IP so traffic is proxied.
-- **Claude Desktop** uses a separate stdio instance of `kubernetes-mcp-server` — independent of the SSE server above.
+- **k3d** — Bifrost pod → `mcp-kubernetes-sse` Service → Endpoints (`192.168.1.21`) → Mac MCP server. k3d pods reach the Mac LAN IP directly via the Docker bridge.
+- **kind** — Bifrost pod → `mcp-kubernetes-sse` Service → `mcp-kubernetes-proxy` pod (socat) → `192.168.65.254` → Mac MCP server. kind pods cannot route to the Mac LAN IP so traffic is proxied via socat.
+- **Claude Desktop** uses a separate stdio instance of `kubernetes-mcp-server` — independent of the SSE server.
 - **curl / LLM clients** reach Bifrost via `kubectl port-forward` on `localhost:8080`.
+
+---
 
 ## MCP Server — Launch Agent Setup
 
-The `kubernetes-mcp-server` runs as a macOS Launch Agent so it starts automatically
-at login and restarts on crash. It exposes `/sse`, `/mcp`, `/healthz` on port 8811.
+The `kubernetes-mcp-server` runs as a macOS Launch Agent so it starts automatically at login and restarts on crash. It exposes `/sse`, `/mcp`, and `/healthz` on port `8811`.
 
 ### Install (one-time)
 
@@ -146,7 +147,7 @@ at login and restarts on crash. It exposes `/sse`, `/mcp`, `/healthz` on port 88
 cp scripts/com.local.mcp-kubernetes-sse.plist ~/Library/LaunchAgents/
 launchctl load -w ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 
-# 2. Verify it's running
+# 2. Verify it is running
 lsof -i :8811 | grep LISTEN       # should show *:8811 (LISTEN)
 curl -s http://localhost:8811/healthz && echo OK
 
@@ -156,22 +157,47 @@ kubectl apply -f manifests/mcp-kubernetes-host-svc.yaml
 # kind:
 kubectl apply -f manifests/mcp-kubernetes-proxy-kind.yaml
 
-# 4. Verify end-to-end
+# 4. Verify in-cluster connectivity
 kubectl exec -n ai-gateway bifrost-0 -- \
   wget -qO- http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/healthz \
   && echo "In-cluster: OK"
 ```
 
-### Logs
+### Verify the MCP Integration
 
 ```bash
-tail -f /tmp/mcp-kubernetes-sse.log   # stdout
-tail -f /tmp/mcp-kubernetes-sse.err   # stderr / errors
+# Check Bifrost client state
+curl -s http://localhost:8080/api/mcp/clients | \
+  jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
+# Expected: { "state": "connected", "tool_count": 20 }
+
+# Discover available tools
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | jq '[.result.tools[].name]'
+
+# Call a tool directly
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"kubernetes_local-pods_list_in_namespace","arguments":{"namespace":"ai-gateway"}}}'
+
+# Call a tool via LLM in agentic mode
+curl -s -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -d '{"model":"anthropic/claude-sonnet-4-5-20250929","messages":[{"role":"user","content":"List all pods in the ai-gateway namespace"}],"tools":"mcp::kubernetes_local"}'
 ```
 
-### Manage
+### Logs and Management
 
 ```bash
+# Logs
+tail -f /tmp/mcp-kubernetes-sse.log   # stdout
+tail -f /tmp/mcp-kubernetes-sse.err   # stderr / errors
+
 # Stop (stays installed, restarts on next login)
 launchctl stop com.local.mcp-kubernetes-sse
 
@@ -184,66 +210,24 @@ launchctl unload ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 rm ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 ```
 
-## Testing the MCP Integration
-
-### Check Bifrost client state
-
-```bash
-curl -s http://localhost:8080/api/mcp/clients | \
-  jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
-# Expected: { "state": "connected", "tool_count": 20 }
-```
-
-### Discover available tools
-
-```bash
-# Always run this first — tool names include the client prefix
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
-  | jq '[.result.tools[].name]'
-```
-
-### Call a tool via Bifrost MCP endpoint
-
-```bash
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "tools/call",
-    "params": {
-      "name": "kubernetes_local-pods_list_in_namespace",
-      "arguments": {
-        "namespace": "ai-gateway"
-      }
-    }
-  }'
-```
-
-### Via LLM (agentic mode)
-
-```bash
-curl -s -X POST http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
-  -d '{
-    "model": "anthropic/claude-sonnet-4-5-20250929",
-    "messages": [{"role": "user", "content": "List all pods in the ai-gateway namespace"}],
-    "tools": "mcp::kubernetes_local"
-  }'
-```
+---
 
 ## Local LLM Demo — Open WebUI via Bifrost
 
-All local Ollama models are accessible through a single Bifrost gateway endpoint,
-with a real user-facing chat interface via [Open WebUI](https://github.com/open-webui/open-webui).
-Every message routes through Bifrost to Ollama running on the Mac host — nothing leaves the machine.
+All local Ollama models are accessible through a single Bifrost gateway endpoint, with a real user-facing chat interface via [Open WebUI](https://github.com/open-webui/open-webui). Every message routes through Bifrost to Ollama running on the Mac host — nothing leaves the machine.
 
 > Full step-by-step demo scenarios: [docs/bifrost-openwebui-demo-scenarios.md](docs/bifrost-openwebui-demo-scenarios.md)
+
+### Request Flow
+
+```
+Browser
+  └── Open WebUI :3001
+        └── POST /v1/chat/completions
+              └── Bifrost :8080 (port-forward)
+                    └── Ollama :11434 (Mac host)
+                          └── openai/qwen2.5:7b (local model)
+```
 
 ### Quick Start — Open WebUI
 
@@ -258,25 +242,15 @@ docker run -d \
   ghcr.io/open-webui/open-webui:main
 ```
 
-Open `http://localhost:3001` — port `3000` is used by Grafana in this environment.
+Open `http://localhost:3001` — port `3000` is reserved by Grafana in this environment.
 
-### Request Flow
-
-```
-Browser
-  └── Open WebUI :3001
-        └── POST /v1/chat/completions
-              └── Bifrost :8080 (port-forward)
-                    └── Ollama :11434 (Mac host)
-                          └── openai/qwen2.5:7b (local model)
-```
+> **Note:** Use `host.docker.internal` (not `localhost`) for `OPENAI_API_BASE_URL` — this resolves to the Mac host from inside the Docker container, routing traffic correctly through Bifrost.
 
 ---
 
 ### Model Selection
 
-All models registered in Bifrost appear in the Open WebUI model dropdown,
-prefixed with `openai/` to indicate the provider type.
+All models registered in Bifrost appear in the Open WebUI model dropdown, prefixed with `openai/` to indicate the provider type.
 
 ![Open WebUI model selector showing available Ollama models](docs/screenshots/owui-model-selector.png)
 
@@ -284,8 +258,7 @@ prefixed with `openai/` to indicate the provider type.
 
 ### Chat Interface
 
-Users interact with local Ollama models through a familiar chat interface.
-The model name is shown in the header — responses stream in real time via Bifrost.
+Users interact with local Ollama models through a familiar chat interface. The model name is shown in the header — responses stream in real time via Bifrost.
 
 ![Open WebUI chat with qwen2.5:7b response](docs/screenshots/owui-basic-chat.png)
 
@@ -293,8 +266,7 @@ The model name is shown in the header — responses stream in real time via Bifr
 
 ### Multi-Model Comparison
 
-Open WebUI supports running multiple models in parallel on the same prompt.
-Select two models using the **+** icon next to the model selector.
+Open WebUI supports running multiple models in parallel on the same prompt. Select two models using the **+** icon next to the model selector to compare quality and speed side by side.
 
 ![Side by side comparison of qwen2.5:7b and llama3.2:3b](docs/screenshots/owui-model-comparison.png)
 
@@ -302,8 +274,7 @@ Select two models using the **+** icon next to the model selector.
 
 ### Audit Trail
 
-Every request through Bifrost is logged with provider, model, latency, and token counts.
-Visible in the Bifrost UI at `http://localhost:8080/logs` — including requests from Open WebUI.
+Every request through Bifrost is logged with provider, model, latency, and token counts. Open the Bifrost UI at `http://localhost:8080/logs` to see the full audit trail — including all requests from Open WebUI.
 
 ![Bifrost logs showing requests from Open WebUI](docs/screenshots/bifrost-logs.png)
 
@@ -311,8 +282,7 @@ Visible in the Bifrost UI at `http://localhost:8080/logs` — including requests
 
 ### Access Control
 
-Virtual keys enforce model-level access control. Requests to unauthorised models
-are rejected at the gateway before reaching Ollama.
+Virtual keys enforce model-level access control. Requests to unauthorised models are rejected at the gateway before reaching Ollama.
 
 ![403 response from Bifrost for blocked model access](docs/screenshots/bifrost-access-control.png)
 
@@ -322,7 +292,7 @@ are rejected at the gateway before reaching Ollama.
 
 | Item | Value |
 |---|---|
-| Bifrost UI | http://localhost:8080 (via port-forward) |
+| Bifrost UI | `http://localhost:8080` (via port-forward) |
 | MCP JSON-RPC endpoint | `POST http://localhost:8080/mcp` |
 | Completions endpoint | `POST http://localhost:8080/v1/chat/completions` |
 | Auth header | `X-Api-Key: $BIFROST_VIRTUAL_KEY` |
@@ -334,13 +304,14 @@ are rejected at the gateway before reaching Ollama.
 | Ollama base URL (kind) | `http://192.168.65.254:11434` (no `/v1` suffix) |
 | MCP SSE URL (in-cluster) | `http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse` |
 | MCP SSE URL (local) | `http://localhost:8811/sse` |
-| Open WebUI | http://localhost:3001 |
+| Open WebUI | `http://localhost:3001` |
+| Grafana | `http://localhost:3000` |
+
+---
 
 ## After Restarting the kind Cluster
 
-The kind API server port is dynamic and changes on every cluster restart. Both the
-Launch Agent SSE server and Claude Desktop cache the kubeconfig at startup — they must
-be restarted whenever kind is stopped and restarted.
+The kind API server port changes on every cluster restart. Both the Launch Agent SSE server and Claude Desktop cache the kubeconfig at startup and must be restarted whenever kind is stopped and restarted.
 
 ```bash
 # 1. Restart the Launch Agent (reloads kubeconfig with new API port)
@@ -356,39 +327,30 @@ open -a Claude
 kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &
 
 # 4. Verify everything is healthy
-curl -s http://localhost:8080/api/mcp/clients | jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
+curl -s http://localhost:8080/api/mcp/clients | \
+  jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
 ```
+
+---
 
 ## Known Gotchas
 
-- **Restart Launch Agent + Claude Desktop after kind cluster restart** — the kind API
-  server port changes on every restart. Both processes cache kubeconfig at startup and
-  will fail with `RESOURCE_NOT_FOUND` errors until restarted. See "After Restarting
-  the kind Cluster" above.
-- **`pods_top` fails with `RESOURCE_NOT_FOUND`** — either Metrics Server isn't installed
-  (run `./scripts/install.sh --apply`) or the MCP server has a stale kubeconfig (restart
-  the Launch Agent). Confirmed working via curl does not mean the Claude Desktop MCP
-  instance is also working — they are separate processes.
-- **Use single-line curl for MCP calls** — zsh parse errors occur when pasting multi-line
-  curl blocks with comments (`#`) inline. Always use single-line format:
-  `curl -s -X POST ... -d '{"jsonrpc":"2.0",...}'`
-- **Tool name format is `kubernetes_local-<tool>`** — underscore in client name, hyphen
-  separator. Use `tools/list` to discover exact names before calling.
-- **No `x-bf-mcp-include-clients` header needed** — tool names are prefixed so Bifrost
-  routes automatically. The header is only needed if tools are unprefixed.
-- **Use port 8080 always** — only run one cluster at a time and port-forward to 8080.
-- **`state: null` from curl** — means no port-forward is running. Check with `lsof -i :8080`.
-- **k3d uses Mac LAN IP (`192.168.1.21`)** — kind cannot reach this, uses socat proxy instead.
-- **kind: never create manual EndpointSlices** — they conflict with the controller-managed
-  one and break kube-proxy. Delete with `kubectl delete endpointslice mcp-kubernetes-sse -n ai-gateway`.
-- **`--port` flag only, no `--transport`** — `ENABLE_UNSAFE_SSE_TRANSPORT=1` env var required.
-- **Claude Desktop runs its own stdio instance** — separate from the SSE Launch Agent, do not
-  change `claude_desktop_config.json`.
-- **Open WebUI on port 3001** — port 3000 is used by Grafana. Use `host.docker.internal`
-  (not `localhost`) for `OPENAI_API_BASE_URL` inside the Docker container.
-- Helm install issues (Kyverno label enforcement, encryption key secret, stale releases)
-- Ollama provider registration (use `openai` type, no `/v1` in base URL)
-- Agent mode: `tools_to_auto_execute` set on MCP client in Bifrost UI, not a request header
+- **Restart Launch Agent + Claude Desktop after kind cluster restart** — the kind API server port changes on every restart. Both processes cache kubeconfig at startup and will fail with `RESOURCE_NOT_FOUND` errors until restarted. See section above.
+- **`pods_top` fails with `RESOURCE_NOT_FOUND`** — either Metrics Server is not installed (run `./scripts/install.sh --apply`) or the MCP server has a stale kubeconfig (restart the Launch Agent). A working curl test does not mean the Claude Desktop MCP instance is also working — they are separate processes.
+- **Use single-line curl for MCP calls** — zsh parse errors occur when pasting multi-line curl blocks with inline comments (`#`). Always use single-line format: `curl -s -X POST ... -d '{"jsonrpc":"2.0",...}'`
+- **Tool name format is `kubernetes_local-<tool>`** — underscore in the client name, hyphen as separator. Run `tools/list` to confirm exact names before calling.
+- **No `x-bf-mcp-include-clients` header needed** — tool names are prefixed so Bifrost routes automatically. The header is only needed if tools are unprefixed.
+- **`state: null` from curl** — the Bifrost port-forward is not running. Check with `lsof -i :8080`.
+- **k3d uses Mac LAN IP (`192.168.1.21`)** — kind cannot route to this address and uses the socat proxy instead.
+- **kind: never create manual EndpointSlices** — they conflict with the controller-managed slice and break kube-proxy. Remove with `kubectl delete endpointslice mcp-kubernetes-sse -n ai-gateway`.
+- **`ENABLE_UNSAFE_SSE_TRANSPORT=1` is required** — use the `--port` flag only when starting the MCP server, not `--transport`.
+- **Claude Desktop runs its own stdio instance** — separate from the SSE Launch Agent. Do not modify `claude_desktop_config.json` for the SSE server.
+- **Open WebUI on port `3001`** — port `3000` is used by Grafana. Always use `host.docker.internal` (not `localhost`) for `OPENAI_API_BASE_URL` inside the container.
+- **Helm install failures** — if Kyverno label enforcement or the encryption key secret causes the install to fail, check the pre-flight steps in `./scripts/install.sh` and re-run with `--apply`.
+- **Ollama provider registration** — use provider type `openai`, not `ollama`. Do not add `/v1` to the base URL — Bifrost appends it automatically.
+- **Agent mode** — `tools_to_auto_execute` is configured on the MCP client in the Bifrost UI, not passed as a request header.
+
+---
 
 ## Validated Environment
 
@@ -403,9 +365,11 @@ curl -s http://localhost:8080/api/mcp/clients | jq '{state: .clients[0].state, t
 | Anthropic | claude-sonnet-4-5-20250929 |
 | Open WebUI | latest (ghcr.io/open-webui/open-webui:main) |
 
+---
+
 ## Docs
 
-- [Bifrost In-Depth Analysis](docs/bifrost-analysis.md)
 - [Demo Guide](docs/demo-guide.md)
-- [AI Gateway Comparison](docs/gateway-comparison.md)
 - [Open WebUI Demo Scenarios](docs/bifrost-openwebui-demo-scenarios.md)
+- [AI Gateway Comparison](docs/gateway-comparison.md)
+- [Bifrost In-Depth Analysis](docs/bifrost-analysis.md)
