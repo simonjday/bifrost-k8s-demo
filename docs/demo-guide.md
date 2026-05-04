@@ -398,7 +398,7 @@ Scheduling, Configuration, and Runtime groups with a severity-rated table.
 
 ### Validated Output
 
-![gemma4 responding to Kubernetes triage prompt in Open WebUI](docs/screenshots/owui-gemma4-triage-response.png)
+![gemma4 responding to Kubernetes triage prompt in Open WebUI](screenshots/owui-gemma4-triage-response.png)
 
 **What Bifrost does:** Routes the completion to local Ollama `gemma4:latest` via
 the `openai` provider. Logged in Bifrost Logs with provider, model, latency, and
@@ -833,7 +833,7 @@ governance and observability story.
 
 ### Validated Dashboard Screenshot
 
-![Bifrost logs dashboard showing requests, costs, latency and provider breakdown](docs/screenshots/bifrost-logs.png)
+![Bifrost logs dashboard showing requests, costs, latency and provider breakdown](screenshots/bifrost-logs.png)
 
 Key things to point out in the dashboard:
 
