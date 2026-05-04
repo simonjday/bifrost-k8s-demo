@@ -237,7 +237,7 @@ docker run -d \
   --name open-webui \
   -p 3001:8080 \
   -e OPENAI_API_BASE_URL=http://host.docker.internal:8080/v1 \
-  -e OPENAI_API_KEY=sk-bf-0b7391e8-12b3-45f7-bf83-69f6f8910115 \
+  -e OPENAI_API_KEY=sk-bf-0b7391e8-12b3-45f7-bf83-xxxxx \
   -v open-webui:/app/backend/data \
   --restart always \
   ghcr.io/open-webui/open-webui:main
@@ -255,7 +255,7 @@ services:
       - "3001:8080"
     environment:
       OPENAI_API_BASE_URL: http://host.docker.internal:8080/v1
-      OPENAI_API_KEY: sk-bf-0b7391e8-12b3-45f7-bf83-69f6f8910115
+      OPENAI_API_KEY: sk-bf-0b7391e8-12b3-45f7-bf83-xxxxxxx
     volumes:
       - open-webui:/app/backend/data
     restart: always
