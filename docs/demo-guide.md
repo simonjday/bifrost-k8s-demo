@@ -14,7 +14,7 @@
 |---|---|---|
 | Bifrost StatefulSet | `kubectl -n ai-gateway get pods` | `bifrost-0` Running |
 | Port-forward | `curl -s http://localhost:8080/health` | `{"status":"ok"}` |
-| MCP SSE server | curl -s --max-time 2 http://localhost:8811/sse | `event: endpoint` |
+| MCP SSE server | `curl -s --max-time 2 http://localhost:8811/sse` | `event: endpoint` |
 | MCP Service | `kubectl -n ai-gateway get svc mcp-kubernetes-sse` | ClusterIP present |
 | MCP Endpoints (k3d) | `kubectl -n ai-gateway get endpoints mcp-kubernetes-sse` | `192.168.1.21:8811` |
 | MCP Endpoints (kind) | `kubectl -n ai-gateway get endpoints mcp-kubernetes-sse` | `192.168.65.254:8811` via socat proxy |
@@ -77,7 +77,7 @@ curl -s http://localhost:8080/v1/chat/completions \
 # Expected: "pong" or similar one-word response
 ```
 
-**Provider — Ollama (required for Demos 8, 9, and Open WebUI):**
+**Provider — Ollama (required for Demos 7, 8, and Open WebUI):**
 
 Full Ollama setup is covered in [docs/ollama-bifrost-setup.md](ollama-bifrost-setup.md).
 Verify the `openai` provider is registered and Ollama is reachable:
@@ -235,7 +235,8 @@ kubectl -n argocd get applications --no-headers | wc -l
 ### 5 — Ollama running (for Demos 8 and 9)
 
 Ollama must be bound to all interfaces and reachable from inside the cluster.
-Required for Demos 7 and 8. Full setup is covered in [docs/ollama-bifrost-setup.md](ollama-bifrost-setup.md).
+Required for Demo 7 (local vs cloud comparison) and Demo 8 (fast local query), and all Open WebUI demos.
+Full setup is covered in [docs/ollama-bifrost-setup.md](ollama-bifrost-setup.md).
 
 Quick check:
 
@@ -290,14 +291,14 @@ In all three cases Bifrost enforces identical governance — the same virtual ke
 the same tool allow-list, the same audit trail in the Logs tab.
 
 ```
-Claude Chat (kubernetes-local stdio) ──► Bifrost :8080/v1 ──► Ollama / Anthropic
+Claude Chat (kubernetes-local stdio) ──► Anthropic API (direct, not via Bifrost)
 curl (API)              ────────────────► Bifrost :8080 ───► kubernetes-mcp-server / Ollama
 Open WebUI (HTTP)  ─────────────────────► Bifrost :8080/v1 ──► Ollama
 ```
 
 | Input | Auth enforced | Tool allow-list | Logged in Bifrost | Model routing |
 |---|---|---|---|---|
-| Claude Chat (kubernetes-local) | ✅ LLM via Bifrost | 🟡 Tool governance via direct stdio | ✅ Completions logged | ✅ |
+| Claude Chat (kubernetes-local) | ✅ Anthropic API direct | 🟡 Tool governance via direct stdio | ❌ Not logged in Bifrost | ❌ No Bifrost routing |
 | curl | ✅ | ✅ | ✅ | ✅ |
 | Open WebUI | ✅ Completions auth | ❌ No MCP tool access | ✅ Completions logged | ✅ |
 
@@ -398,7 +399,7 @@ Scheduling, Configuration, and Runtime groups with a severity-rated table.
 
 ### Validated Output
 
-![gemma4 responding to Kubernetes triage prompt in Open WebUI](screenshots/owui-gemma4-triage-response.png)
+![gemma4 responding to Kubernetes triage prompt in Open WebUI](docs/screenshots/owui-gemma4-triage-response.png)
 
 **What Bifrost does:** Routes the completion to local Ollama `gemma4:latest` via
 the `openai` provider. Logged in Bifrost Logs with provider, model, latency, and
@@ -535,13 +536,28 @@ cluster access. The same `resources_list` tool works for any CRD.
 
 ### Via Claude Chat (kubernetes-local)
 
-> Uses the direct stdio kubernetes-local connection. LLM completion routes through
-> Bifrost and is logged — individual tool calls are not Bifrost-governed in this path.
+> Claude Chat in this environment has the **ArgoCD MCP tools** loaded directly
+> (via `claude_desktop_config.json`), not the kubernetes-local CRD path. Claude
+> Chat completions go directly to the Anthropic API — NOT through Bifrost and
+> NOT logged in Bifrost. Use the ArgoCD tools prompt below:
 
 ```
-List all Argo CD Applications in the argocd namespace and show their sync
-and health status.
+List all Argo CD applications and show their sync and health status.
 ```
+
+This uses `argocd:list_applications` directly — faster and richer than querying
+the Application CRD via kubernetes tools. All 5 applications in the devops-lab
+project will be returned with sync status, health, source repo, and target namespace.
+
+**Validated output (May 2026):**
+
+| Application | Sync | Health | Namespace |
+|---|---|---|---|
+| `guestbook` | ✅ Synced | ✅ Healthy | `apps` |
+| `kyverno-policies` | ✅ Synced | ✅ Healthy | `kyverno` |
+| `load-generator` | ✅ Synced | ✅ Healthy | `apps` |
+| `podinfo` | ✅ Synced | ✅ Healthy | `apps` |
+| `prometheus-rules` | ✅ Synced | ✅ Healthy | `monitoring` |
 
 ### Via curl
 
@@ -566,7 +582,7 @@ curl -s -X POST http://localhost:8080/mcp \
 > ⚠️ Open WebUI cannot execute MCP tool calls. Use a general knowledge prompt instead.
 
 1. Open `http://localhost:3001` → New Chat
-2. Select openai/gemma4:latest
+2. Select `openai/gemma4:latest`
 3. Send:
 ```
 How does Argo CD track application health and sync status? What does
@@ -701,7 +717,7 @@ workload as healthy, degraded, or critical and explain why.
 | `scheduled-job` | ✅ Healthy | CronJob completing successfully |
 | `completed-job` | ✅ Healthy | Completed job |
 
-**What Bifrost does:** Via curl — full agentic loop runs inside Bifrost, three separate log entries per tool call. Via Open WebUI — same. Via Claude Chat — Claude chains the tool calls autonomously via kubernetes-local stdio; the LLM completion is logged in Bifrost showing the full synthesised result.
+**What Bifrost does:** Via curl — full agentic loop runs inside Bifrost, three separate log entries per tool call, completion logged with provider/model/latency. Via Open WebUI — routes to Ollama via Bifrost completions API, knowledge-based response only, no MCP tool access. Via Claude Chat — Claude chains tool calls via direct kubernetes-local stdio; completions go directly to Anthropic API, NOT through Bifrost and NOT logged in Bifrost.
 
 ---
 
@@ -716,21 +732,11 @@ pre-warmed, `openai` provider registered in Bifrost.
 
 ### Via Claude Chat (kubernetes-local)
 
-> LLM completions route through Bifrost and are logged with provider, model,
-> latency, and token counts. This demo shows Bifrost's model routing clearly
-> even via the direct stdio path.
-
-Run these back to back and compare the responses:
-
-```
-Using openai/qwen2.5:7b via Bifrost, explain what a Kubernetes Deployment is
-and when you would use one over a StatefulSet.
-```
-
-```
-Using anthropic/claude-sonnet-4-5-20250929 via Bifrost, explain what a
-Kubernetes Deployment is and when you would use one over a StatefulSet.
-```
+> ⚠️ Claude Chat completions go directly to the Anthropic API — they do NOT
+> route through Bifrost and are NOT logged in Bifrost. Claude Chat cannot
+> route completions to Ollama or any other Bifrost provider. The local vs
+> cloud comparison is not demonstrable via Claude Chat. **Use curl or Open
+> WebUI for this demo.**
 
 ### Via curl
 
@@ -781,7 +787,7 @@ simultaneously, one per model, each showing provider, latency, and token count.
 | `qwen3-coder:30b` | ~18s | Good detail, misses policy nuance |
 | `claude-sonnet-4-5-20250929` | ~4.5s | Full diagnosis: Kyverno violations, missing probes, security context, root cause per app |
 
-**What Bifrost does:** Across all three surfaces — same endpoint, same virtual key, model routing is Bifrost's responsibility. Both local and cloud requests appear in Bifrost Logs with provider, model, latency, and token counts — this is the one demo where all three surfaces show identical Bifrost behaviour since it is purely about model routing, not tool governance.
+**What Bifrost does:** Via curl and Open WebUI — same endpoint, same virtual key, model routing is Bifrost's responsibility; both local and cloud requests appear in Bifrost Logs with provider, model, latency, and token counts. Via Claude Chat — completions go directly to Anthropic API, not through Bifrost; this demo cannot be shown via Claude Chat.
 
 ---
 
@@ -792,13 +798,9 @@ categorisation using the local 7B model — zero API cost, full audit trail.
 
 ### Via Claude Chat (kubernetes-local)
 
-> LLM completion routes through Bifrost and is logged — provider shows as
-> `openai`, latency ~1.5–2s, zero upstream API cost.
-
-```
-Using openai/qwen2.5:7b via Bifrost, list all namespaces in the cluster and
-categorise them as system, infrastructure, or application namespaces.
-```
+> ⚠️ Claude Chat completions go directly to the Anthropic API — they do NOT
+> route through Bifrost. Claude Chat cannot route to Ollama or demonstrate
+> local model inference via Bifrost. **Use curl or Open WebUI for this demo.**
 
 ### Via curl
 
@@ -833,7 +835,7 @@ governance and observability story.
 
 ### Validated Dashboard Screenshot
 
-![Bifrost logs dashboard showing requests, costs, latency and provider breakdown](screenshots/bifrost-logs.png)
+![Bifrost logs dashboard showing requests, costs, latency and provider breakdown](docs/screenshots/bifrost-logs.png)
 
 Key things to point out in the dashboard:
 
@@ -848,11 +850,9 @@ Key things to point out in the dashboard:
 | **Model column** | `claude-haiku-4-...` for MCP tool flows, `qwen2.5:32b` for the failed rate limit attempt |
 | **Type column** | `Chat` for completions, `Chat Stream` for streaming, `List Models` for model discovery |
 
-**Talking point:** _"Every request — regardless of whether it came from curl or Open WebUI,
-— is logged here with provider, model, latency, token count, and cost.
+**Talking point:** _"Every request — regardless of whether it came from curl, Open WebUI,
+or Claude chat — is logged here with provider, model, latency, token count, and cost.
 This is the audit trail. You know exactly what was called, by which key, at what cost."_
-
-Claude Code doesnt connect via Bifrost so calls are not logged in Bifrost
 
 ---
 
