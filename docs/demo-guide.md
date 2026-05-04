@@ -2,7 +2,7 @@
 
 > **Clusters:** k3d-demo / kind-devops-lab (auto-detected)
 > **Date:** May 2026
-> **Bifrost version:** v1.5.0-prerelease7
+> **Bifrost version:** v1.4.24 prerelease (image: docker.io/maximhq/bifrost:v1.4.24)
 
 ---
 

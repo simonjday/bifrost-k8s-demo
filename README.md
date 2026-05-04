@@ -6,53 +6,40 @@ A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/
 
 ```
 bifrost-k8s-demo/
-├── README.md
-├── demo-sh-scripts
-│   ├── 01-governance-block.sh
-│   ├── 02-cost-attribution.sh
-│   ├── 03-crashloop-diagnosis.sh
-│   ├── 04-argocd-status.sh
-│   ├── 05-kargo-pipeline.sh
-│   ├── 06-llm-triage.sh
-│   ├── 07-multi-tool-correlation.sh
-│   ├── 08-local-vs-cloud.sh
-│   └── 09-ollama-fast-query.sh
-├── docs
-│   ├── AWS MCP Server — Deployment & Demo Guide.md
-│   ├── Argo CD MCP Server — Deployment Guide.md
-│   ├── Azure MCP Server — Deployment & Demo Guide.md
-│   ├── Datadog MCP Server — Deployment & Demo Guide.md
-│   ├── Dynatrace MCP Server — Deployment & Demo Guide.md
-│   ├── GitHub MCP Server — Deployment & Demo Guide.md
-│   ├── Grafana MCP Server — Deployment & Demo Guide.md
-│   ├── Prometheus MCP Server — Deployment & Demo Guide.md
-│   ├── basic-bifrost-demo-guide.md
-│   ├── bifrost-analysis.md
-│   ├── bifrost-openwebui-demo-scenarios.md
-│   ├── demo-guide.md
-│   ├── gateway-comparison.md
-│   ├── network-flow.svg
-│   ├── ollama-bifrost-setup.md
-│   └── screenshots
-│       ├── bifrost-access-control.png
-│       ├── bifrost-logs.png
+├── README.md                                  # This file
+├── docs/
+│   ├── network-flow.svg                       # MCP network flow diagram (k3d + kind)
+│   ├── demo-guide.md                          # Complete demo playbook (pre-reqs, curl commands)
+│   ├── gateway-comparison.md                  # Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone
+│   ├── bifrost-openwebui-demo-scenarios.md    # Step-by-step Open WebUI demo scenarios
+│   └── screenshots/                           # Demo screenshots (PNG)
+│       ├── owui-model-selector.png
 │       ├── owui-basic-chat.png
-│       ├── owui-gemma4-triage-response.png
 │       ├── owui-model-comparison.png
-│       └── owui-model-selector.png
-├── manifests
-│   ├── bifrost-values-dev.yaml
-│   ├── bifrost-values-prod.yaml
-│   ├── mcp-kubernetes-host-svc.yaml
-│   ├── mcp-kubernetes-proxy-kind.yaml
-│   └── namespace.yaml
-├── scripts
-│   ├── com.local.mcp-kubernetes-sse.plist
-│   ├── install.sh
-│   ├── start-mcp-server.sh
-│   ├── teardown.sh
-│   └── warmup-ollama.sh
-
+│       ├── bifrost-logs.png
+│       └── bifrost-access-control.png
+├── manifests/
+│   ├── namespace.yaml                         # ai-gateway namespace
+│   ├── bifrost-values-dev.yaml                # Helm values for local dev install
+│   ├── bifrost-values-prod.yaml               # Helm values for production HA install
+│   ├── mcp-kubernetes-host-svc.yaml           # Service + Endpoints for k3d (Mac LAN IP)
+│   └── mcp-kubernetes-proxy-kind.yaml         # socat proxy Deployment + Service for kind
+├── scripts/
+│   ├── install.sh                             # Full install: Bifrost + MCP + providers
+│   ├── teardown.sh                            # Clean teardown (dry-run by default)
+│   ├── start-mcp-server.sh                    # One-shot: apply k8s svc + start SSE server
+│   ├── com.local.mcp-kubernetes-sse.plist     # macOS Launch Agent for kubernetes-mcp-server
+│   └── warmup-ollama.sh                       # Pre-warm Ollama models before demo
+└── demos/
+    ├── 01-basic-routing.sh                    # Demo 1: Single endpoint, multiple models
+    ├── 02-cost-attribution.sh                 # Demo 2: Namespace resource consumption
+    ├── 03-crashloop-diagnosis.sh              # Demo 3: Pod diagnosis workflow
+    ├── 04-argocd-status.sh                    # Demo 4: Argo CD CRD queries
+    ├── 05-governance-block.sh                 # Demo 5: Destructive tool blocking
+    ├── 06-lm-triage.sh                        # Demo 6: LLM-driven cluster triage (agent mode)
+    ├── 07-multi-tool-correlation.sh           # Demo 7: Pods + Argo CD correlation
+    ├── 08-local-vs-cloud.sh                   # Demo 8: Ollama vs Anthropic comparison
+    └── 09-ollama-fast-query.sh                # Demo 9: Sub-2s local model query
 ```
 
 ## Prerequisites
@@ -369,7 +356,7 @@ curl -s http://localhost:8080/api/mcp/clients | \
 
 | Component | Version |
 |---|---|
-| Bifrost | v1.5.0-prerelease7 (chart 2.1.13) |
+| Bifrost | v1.4.24 prerelease (chart 2.1.13) |
 | kubernetes-mcp-server | latest (Red Hat/containers) |
 | k3d cluster | k3d-demo, k3s v1.33.x |
 | kind cluster | kind-devops-lab, k8s v1.33.x |
