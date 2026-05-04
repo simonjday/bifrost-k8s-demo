@@ -14,7 +14,7 @@
 |---|---|---|
 | Bifrost StatefulSet | `kubectl -n ai-gateway get pods` | `bifrost-0` Running |
 | Port-forward | `curl -s http://localhost:8080/health` | `{"status":"ok"}` |
-| MCP SSE server | `curl -s --max-time 2 http://localhost:8811/sse` | `event: endpoint` |
+| MCP SSE server | curl -s --max-time 2 http://localhost:8811/sse | `event: endpoint` |
 | MCP Service | `kubectl -n ai-gateway get svc mcp-kubernetes-sse` | ClusterIP present |
 | MCP Endpoints (k3d) | `kubectl -n ai-gateway get endpoints mcp-kubernetes-sse` | `192.168.1.21:8811` |
 | MCP Endpoints (kind) | `kubectl -n ai-gateway get endpoints mcp-kubernetes-sse` | `192.168.65.254:8811` via socat proxy |
@@ -566,7 +566,7 @@ curl -s -X POST http://localhost:8080/mcp \
 > ⚠️ Open WebUI cannot execute MCP tool calls. Use a general knowledge prompt instead.
 
 1. Open `http://localhost:3001` → New Chat
-2. Select `openai/gemma4:latest`
+2. Select openai/gemma4:latest
 3. Send:
 ```
 How does Argo CD track application health and sync status? What does
@@ -822,6 +822,37 @@ infrastructure, or application. Give me a brief reason for each.
 ```
 
 **What Bifrost does:** Routes to local Ollama via the `openai` provider across all three surfaces. Bifrost Logs shows provider `openai`, latency ~1.5–2s, zero upstream API cost. Model routing governance is identical to a cloud model call regardless of input surface.
+
+---
+
+## Bifrost Dashboard — Audit Trail
+
+The Bifrost UI at `http://localhost:8080/logs` provides a real-time audit trail of
+every request across all surfaces. Point to this during any demo to reinforce the
+governance and observability story.
+
+### Validated Dashboard Screenshot
+
+![Bifrost logs dashboard showing requests, costs, latency and provider breakdown](docs/screenshots/bifrost-logs.png)
+
+Key things to point out in the dashboard:
+
+| Metric | What it shows |
+|---|---|
+| **Total Requests** | Every call across all surfaces — curl, Open WebUI, Claude Chat completions |
+| **Success Rate** | 86.32% — the red entries are the rate limit errors (expected during setup) |
+| **Avg Latency** | 14,032ms — driven up by the agentic MCP tool loop calls |
+| **Total Tokens** | 490,916 — full token accounting including tool schema injection |
+| **Total Cost** | $0.7009 — all Anthropic Haiku calls for the session |
+| **Provider column** | Shows `ANTHROPIC` for Haiku calls, `OPENAI` for Ollama calls |
+| **Model column** | `claude-haiku-4-...` for MCP tool flows, `qwen2.5:32b` for the failed rate limit attempt |
+| **Type column** | `Chat` for completions, `Chat Stream` for streaming, `List Models` for model discovery |
+
+**Talking point:** _"Every request — regardless of whether it came from curl or Open WebUI,
+— is logged here with provider, model, latency, token count, and cost.
+This is the audit trail. You know exactly what was called, by which key, at what cost."_
+
+Claude Code doesnt connect via Bifrost so calls are not logged in Bifrost
 
 ---
 
