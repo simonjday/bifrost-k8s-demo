@@ -12,11 +12,59 @@ Bifrost acts as a unified AI gateway running inside your local k3d cluster. By r
 
 ## Architecture
 
-The request flow from Claude chat to an Ollama model is:
+The request flow from curl or Open WebUI to an Ollama model via Bifrost is:
 
 ```
-Claude Chat  →  Bifrost (k3d or kind pod, ai-gateway ns)  →  Ollama (Mac host :11434)
+curl / Open WebUI  →  Bifrost :8080 (kind or k3d pod)  →  Ollama (Mac host :11434)
 ```
+
+The network path differs between kind and k3d because Docker Desktop uses a different gateway IP. The diagram below shows both paths side by side.
+
+```mermaid
+flowchart TB
+    subgraph mac ["Mac Host"]
+        OL["Ollama\n0.0.0.0:11434"]
+
+        subgraph kind ["kind cluster (Docker Desktop)"]
+            subgraph ag1 ["ai-gateway namespace"]
+                BF1["bifrost-0"]
+                SC["socat proxy pod\n192.168.65.254:11434"]
+                SV1["mcp-kubernetes-sse\nService :8811"]
+            end
+        end
+
+        subgraph k3d ["k3d cluster (Docker)"]
+            subgraph ag2 ["ai-gateway namespace"]
+                BF2["bifrost-0"]
+                EP["Endpoints\n192.168.1.21:8811"]
+                SV2["mcp-kubernetes-sse\nService :8811"]
+            end
+        end
+
+        MCPS["kubernetes-mcp-server\nMac :8811"]
+    end
+
+    BF1 -->|"openai provider"| SC
+    SC -->|"192.168.65.254\nDocker gateway"| OL
+    BF1 --> SV1 --> SC
+
+    BF2 -->|"openai provider"| EP
+    EP -->|"192.168.1.21\nMac LAN IP direct"| OL
+    BF2 --> SV2 --> EP
+
+    SC -->|":8811"| MCPS
+    EP -->|":8811"| MCPS
+
+    style SC fill:#FAC775,stroke:#BA7517,color:#412402
+    style OL fill:#97C459,stroke:#3B6D11,color:#173404
+    style MCPS fill:#5DCAA5,stroke:#0F6E56,color:#04342C
+    style BF1 fill:#85B7EB,stroke:#185FA5,color:#042C53
+    style BF2 fill:#85B7EB,stroke:#185FA5,color:#042C53
+```
+
+> **kind** — Bifrost pods cannot reach the Mac LAN IP directly. Traffic routes via a `socat` proxy pod using the Docker Desktop gateway address `192.168.65.254`. This is always stable regardless of DHCP.
+
+> **k3d** — Bifrost pods can reach the Mac LAN IP directly via the Docker bridge. Use the output of `ipconfig getifaddr en0` as the Ollama base URL. Consider a DHCP reservation if your IP changes.
 
 Key points:
 

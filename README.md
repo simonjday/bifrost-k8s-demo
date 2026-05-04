@@ -90,6 +90,45 @@ curl -s http://localhost:8080/api/mcp/clients | \
 
 ## Architecture
 
+The diagram below shows how each client surface routes requests — and where Bifrost governance applies. Claude Chat bypasses Bifrost entirely for both tool calls and completions. Only curl and Open WebUI route through Bifrost and are subject to its auth, allow-list, and audit logging.
+
+```mermaid
+flowchart LR
+    CC["Claude Chat"]
+    CU["curl"]
+    OW["Open WebUI"]
+    BF["Bifrost :8080\nAuth · Allow-list · Log"]
+    AN["Anthropic API"]
+    OL["Ollama :11434"]
+    MCP["kubernetes-mcp-server\n:8811"]
+
+    CC -->|"tool calls\ndirect stdio"| MCP
+    CC -->|"completions\ndirect"| AN
+    CU -->|"MCP tool calls"| BF
+    CU -->|"LLM completions"| BF
+    OW -->|"completions only"| BF
+    BF --> AN
+    BF --> OL
+    BF --> MCP
+
+    style CC fill:#AFA9EC,stroke:#534AB7,color:#26215C
+    style CU fill:#F0997B,stroke:#993C1D,color:#4A1B0C
+    style OW fill:#EF9F27,stroke:#854F0B,color:#412402
+    style BF fill:#85B7EB,stroke:#185FA5,color:#042C53
+    style AN fill:#B4B2A9,stroke:#5F5E5A,color:#2C2C2A
+    style OL fill:#97C459,stroke:#3B6D11,color:#173404
+    style MCP fill:#5DCAA5,stroke:#0F6E56,color:#04342C
+
+    linkStyle 0 stroke:#888780,stroke-dasharray:5 5
+    linkStyle 1 stroke:#888780,stroke-dasharray:5 5
+    linkStyle 2 stroke:#378ADD
+    linkStyle 3 stroke:#378ADD
+    linkStyle 4 stroke:#378ADD
+```
+
+> **Key point:** Dashed arrows bypass Bifrost and are not governed or logged. Solid arrows pass through Bifrost and are subject to auth, tool allow-list enforcement, model access control, and full audit logging.
+
+
 ### k3d
 
 ```
@@ -308,6 +347,60 @@ Virtual keys enforce model-level access control. Requests to unauthorised models
 | Grafana | `http://localhost:3000` |
 
 ---
+
+## Virtual Key Model
+
+Virtual keys sit between callers and backend providers, controlling which models and tools each caller can access. The diagram below shows the relationship between callers, virtual keys, provider keys, and backends — and what gets blocked when a restricted key is used.
+
+```mermaid
+flowchart LR
+    subgraph callers ["Callers"]
+        CU["curl (all)"]
+        OW["Open WebUI"]
+        CR["curl (restricted)"]
+    end
+
+    subgraph bifrost ["Bifrost :8080"]
+        subgraph vk1 ["ollama-local key"]
+            VK1A["All models allowed\nAll tools allowed"]
+        end
+        subgraph vk2 ["demo-restricted key"]
+            VK2A["llama3.2:3b only\nRead tools only"]
+        end
+    end
+
+    subgraph providers ["Provider keys"]
+        PK1["anthropic-key"]
+        PK2["ollama-local"]
+    end
+
+    subgraph backends ["Backends"]
+        AN["Anthropic"]
+        OL["Ollama"]
+    end
+
+    CU --> vk1
+    OW --> vk1
+    CR --> vk2
+
+    vk1 --> PK1
+    vk1 --> PK2
+    vk2 -->|"llama3.2:3b only"| PK2
+
+    PK1 --> AN
+    PK2 --> OL
+
+    vk2 -. "❌ qwen2.5:7b blocked" .-> BK["403 model not allowed"]
+    vk2 -. "❌ pods_delete blocked" .-> BK2["tool not found"]
+
+    style BK fill:#F09595,stroke:#A32D2D,color:#501313
+    style BK2 fill:#F09595,stroke:#A32D2D,color:#501313
+    style VK1A fill:#85B7EB,stroke:#185FA5,color:#042C53
+    style VK2A fill:#85B7EB,stroke:#185FA5,color:#042C53
+```
+
+> **Key point:** A restricted key is scoped at creation time. Bifrost enforces the scope on every request — the backend never sees blocked requests.
+
 
 ## After Restarting the kind Cluster
 

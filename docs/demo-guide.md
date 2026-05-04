@@ -116,6 +116,57 @@ export BIFROST_VIRTUAL_KEY="vk_your_key_here"
 
 **Agent mode and tool scoping (one-time UI setup):**
 
+The diagram below shows how virtual keys, provider keys, and tool scoping work together in Bifrost. A restricted key only reaches the backends and models it was scoped to — everything else is blocked at the gateway.
+
+```mermaid
+flowchart LR
+    subgraph callers ["Callers"]
+        CU["curl (all)"]
+        OW["Open WebUI"]
+        CR["curl (restricted)"]
+    end
+
+    subgraph bifrost ["Bifrost :8080"]
+        subgraph vk1 ["ollama-local key"]
+            VK1A["All models allowed\nAll tools allowed"]
+        end
+        subgraph vk2 ["demo-restricted key"]
+            VK2A["llama3.2:3b only\nRead tools only"]
+        end
+    end
+
+    subgraph providers ["Provider keys"]
+        PK1["anthropic-key"]
+        PK2["ollama-local"]
+    end
+
+    subgraph backends ["Backends"]
+        AN["Anthropic"]
+        OL["Ollama"]
+    end
+
+    CU --> vk1
+    OW --> vk1
+    CR --> vk2
+
+    vk1 --> PK1
+    vk1 --> PK2
+    vk2 -->|"llama3.2:3b only"| PK2
+
+    PK1 --> AN
+    PK2 --> OL
+
+    vk2 -. "❌ qwen2.5:7b blocked" .-> BK["403 model not allowed"]
+    vk2 -. "❌ pods_delete blocked" .-> BK2["tool not found"]
+
+    style BK fill:#F09595,stroke:#A32D2D,color:#501313
+    style BK2 fill:#F09595,stroke:#A32D2D,color:#501313
+    style VK1A fill:#85B7EB,stroke:#185FA5,color:#042C53
+    style VK2A fill:#85B7EB,stroke:#185FA5,color:#042C53
+```
+
+
+
 Two settings must be configured on the `kubernetes_local` MCP client in the
 Bifrost UI before running Demos 1 and 7.
 
@@ -286,9 +337,43 @@ kubectl -n goose-test delete pod pending-demo --ignore-not-found=true
 
 ## How Bifrost Governs All Three Input Channels
 
-Every demo in this guide can be driven from three different client surfaces.
-In all three cases Bifrost enforces identical governance — the same virtual key,
-the same tool allow-list, the same audit trail in the Logs tab.
+Every demo in this guide can be driven from three different client surfaces. The diagram below shows exactly how each routes and — critically — which paths bypass Bifrost entirely. Only curl and Open WebUI are subject to Bifrost governance. Claude Chat goes directly to Anthropic and the MCP server.
+
+```mermaid
+flowchart LR
+    CC["Claude Chat"]
+    CU["curl"]
+    OW["Open WebUI"]
+    BF["Bifrost :8080\nAuth · Allow-list · Log"]
+    AN["Anthropic API"]
+    OL["Ollama :11434"]
+    MCP["kubernetes-mcp-server\n:8811"]
+
+    CC -->|"tool calls\ndirect stdio"| MCP
+    CC -->|"completions\ndirect"| AN
+    CU -->|"MCP tool calls"| BF
+    CU -->|"LLM completions"| BF
+    OW -->|"completions only"| BF
+    BF --> AN
+    BF --> OL
+    BF --> MCP
+
+    style CC fill:#AFA9EC,stroke:#534AB7,color:#26215C
+    style CU fill:#F0997B,stroke:#993C1D,color:#4A1B0C
+    style OW fill:#EF9F27,stroke:#854F0B,color:#412402
+    style BF fill:#85B7EB,stroke:#185FA5,color:#042C53
+    style AN fill:#B4B2A9,stroke:#5F5E5A,color:#2C2C2A
+    style OL fill:#97C459,stroke:#3B6D11,color:#173404
+    style MCP fill:#5DCAA5,stroke:#0F6E56,color:#04342C
+
+    linkStyle 0 stroke:#888780,stroke-dasharray:5 5
+    linkStyle 1 stroke:#888780,stroke-dasharray:5 5
+    linkStyle 2 stroke:#378ADD
+    linkStyle 3 stroke:#378ADD
+    linkStyle 4 stroke:#378ADD
+```
+
+> **Dashed arrows** bypass Bifrost — not governed, not logged. **Solid arrows** pass through Bifrost — auth enforced, tool allow-list checked, every call logged.
 
 ```
 Claude Chat (kubernetes-local stdio) ──► Anthropic API (direct, not via Bifrost)
@@ -595,6 +680,39 @@ it mean when an application is Degraded vs OutOfSync?
 
 ## Demo 5: Governance Boundary — Destructive Tools Blocked
 
+The diagram below shows where Bifrost blocks requests across each surface — and where it cannot because the path bypasses Bifrost entirely. This is the most important governance story: curl demonstrates full tool-level enforcement, Open WebUI demonstrates model-level enforcement, and Claude Chat demonstrates neither (it uses a direct path).
+
+```mermaid
+flowchart TD
+    subgraph curl ["curl (full governance)"]
+        C1["pods_delete call"] -->|"tool allow-list check"| BK1["❌ Blocked\ntool not in allow-list"]
+        C2["invalid key"] -->|"auth check"| BK2["❌ 401 rejected\nbackend never reached"]
+        C3["allowed tool call"] -->|"auth + allow-list pass"| OK1["✅ Executed\nlogged in Bifrost"]
+    end
+
+    subgraph owui ["Open WebUI (completions governance)"]
+        O1["restricted key\nqwen2.5:7b request"] -->|"model access check"| BK3["❌ 403 model blocked\nlogged with key identity"]
+        O2["valid key + allowed model"] -->|"pass"| OK2["✅ Routed to Ollama\nlogged in Bifrost"]
+    end
+
+    subgraph chat ["Claude Chat (no Bifrost governance)"]
+        CH1["tool calls"] -->|"direct stdio"| NC1["⚠️ MCP server reached\nnot logged in Bifrost"]
+        CH2["completions"] -->|"Anthropic direct"| NC2["⚠️ Anthropic responds\nnot logged in Bifrost"]
+    end
+
+    style BK1 fill:#F09595,stroke:#A32D2D,color:#501313
+    style BK2 fill:#F09595,stroke:#A32D2D,color:#501313
+    style BK3 fill:#F09595,stroke:#A32D2D,color:#501313
+    style OK1 fill:#97C459,stroke:#3B6D11,color:#173404
+    style OK2 fill:#97C459,stroke:#3B6D11,color:#173404
+    style NC1 fill:#FAC775,stroke:#BA7517,color:#412402
+    style NC2 fill:#FAC775,stroke:#BA7517,color:#412402
+```
+
+> **Key point:** Use curl to demonstrate tool governance blocking (the primary demo). Use Open WebUI with a restricted key to show model-level governance. Do not use Claude Chat for this demo — it bypasses Bifrost's tool allow-list entirely.
+
+
+
 **Narrative:** A developer attempts destructive operations against the cluster.
 Via curl and Open WebUI, Bifrost enforces the tool allow-list and blocks the
 attempts at the gateway before they reach the MCP server. The Claude Chat path
@@ -666,6 +784,34 @@ governance applies. Use curl to demonstrate tool governance.
 ---
 
 ## Demo 6: LLM-Driven Multi-Step Diagnosis (Agent Mode)
+
+The diagram below shows what happens inside Bifrost during a MCP tool-injected completion. Rather than a single request-response, Bifrost runs a full multi-step loop — injecting tools, executing them against the MCP server, and feeding results back to the LLM — before returning the final synthesised answer to the caller.
+
+```mermaid
+sequenceDiagram
+    participant C as curl
+    participant B as Bifrost :8080
+    participant A as Anthropic Haiku
+    participant M as kubernetes-mcp-server
+
+    C->>B: POST /v1/chat/completions<br/>x-bf-mcp-include-clients: kubernetes_local
+    B->>B: Auth check + tool schema inject
+    B->>A: Completion request + 10 tool schemas
+    A-->>B: finish_reason: tool_calls<br/>(events_list, pods_list, nodes_top)
+    B->>M: Execute tool 1 — events_list
+    M-->>B: Warning events (39 violations)
+    B->>M: Execute tool 2 — pods_list
+    M-->>B: CrashLoopBackOff + Pending pods
+    B->>M: Execute tool 3 — nodes_top
+    M-->>B: Node CPU/memory metrics
+    B->>A: Second completion — tool results
+    A-->>B: finish_reason: stop<br/>Full triage report
+    B-->>C: Structured response + audit log entry
+```
+
+> **Key point:** The caller (`curl`) makes one request and receives one response. All tool execution happens inside Bifrost with zero client roundtrips. Three separate log entries appear in Bifrost Logs — one per tool call — plus the final completion entry.
+
+
 
 **Narrative:** The LLM investigates a mixed-health namespace autonomously — calling
 multiple tools in sequence and synthesising a full structured diagnosis.
