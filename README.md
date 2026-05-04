@@ -7,7 +7,7 @@ A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/
 ```
 bifrost-k8s-demo/
 ├── README.md
-├── demos
+├── demo-sh-scripts
 │   ├── 01-governance-block.sh
 │   ├── 02-cost-attribution.sh
 │   ├── 03-crashloop-diagnosis.sh
