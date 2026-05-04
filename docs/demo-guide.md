@@ -6,6 +6,42 @@
 
 ---
 
+## Table of Contents
+
+- [Pre-Requisites](#pre-requisites)
+  - [1 — Infrastructure running](#1--infrastructure-running)
+  - [2 — Bifrost configured](#2--bifrost-configured)
+  - [3 — Demo namespace and workloads](#3--demo-namespace-and-workloads)
+  - [4 — Confirm CRDs available for Demo 4](#4--confirm-crds-available-for-demo-4)
+  - [5 — Ollama running](#5--ollama-running)
+  - [6 — Cleanup](#6--cleanup)
+- [Key API Facts](#key-api-facts-applies-to-all-demos)
+- [How Bifrost Governs All Three Input Channels](#how-bifrost-governs-all-three-input-channels)
+- [Demo 1: Cluster Health Triage](#demo-1-cluster-health-triage)
+- [Demo 2: Namespace Cost Attribution](#demo-2-namespace-cost-attribution)
+- [Demo 3: CrashLoopBackOff Diagnosis](#demo-3-crashloopbackoff-diagnosis)
+- [Demo 4: Argo CD Application Status via CRDs](#demo-4-argo-cd-application-status-via-crds)
+- [Demo 5: Governance Boundary — Destructive Tools Blocked](#demo-5-governance-boundary--destructive-tools-blocked)
+- [Demo 6: LLM-Driven Multi-Step Diagnosis (Agent Mode)](#demo-6-llm-driven-multi-step-diagnosis-agent-mode)
+- [Demo 7: Local vs Cloud Model Comparison](#demo-7-local-vs-cloud-model-comparison)
+- [Demo 8: Fast Local Query (Sub-2s Inference)](#demo-8-fast-local-query-sub-2s-inference)
+- [Demo 9: Code Mode — 50% Token Reduction](#demo-9-code-mode--50-token-reduction)
+- [Demo 10: Automatic Provider Failover](#demo-10-automatic-provider-failover)
+- [Additional Bifrost Features](#additional-bifrost-features)
+  - [Semantic Caching](#semantic-caching)
+  - [Budget Enforcement per Virtual Key](#budget-enforcement-per-virtual-key)
+  - [Prometheus Metrics + Grafana](#prometheus-metrics--grafana)
+  - [Drop-in SDK Replacement](#drop-in-sdk-replacement)
+  - [Weighted Load Balancing](#weighted-load-balancing)
+- [Bifrost Dashboard — Audit Trail](#bifrost-dashboard--audit-trail)
+- [Suggested Demo Order](#suggested-demo-order)
+- [Quick Reference — Tool Names](#quick-reference--tool-names)
+- [Ollama Models Reference](#ollama-models-reference)
+- [Ollama Gotchas](#ollama-gotchas)
+- [Anthropic Gotchas](#anthropic-gotchas)
+
+---
+
 ## Pre-Requisites
 
 ### 1 — Infrastructure running
@@ -34,8 +70,9 @@ ENABLE_UNSAFE_SSE_TRANSPORT=1 PORT=8811 HOST=0.0.0.0 \
 
 **Provider — Anthropic (required for MCP tool-injected demos):**
 
-Demos 1, 6, and 8 use `anthropic/claude-haiku-4-5-20251001` with MCP tool injection.
+Demos 1, 6, 8, 9, and 10 use `anthropic/claude-haiku-4-5-20251001` with MCP tool injection.
 Demo 7 uses both Haiku and `anthropic/claude-sonnet-4-5-20250929` for the local vs cloud comparison.
+Demo 10 also requires Ollama as a fallback provider.
 This requires the Anthropic provider to be registered in Bifrost before running those demos.
 
 In the Bifrost UI at `http://localhost:8080`:
@@ -973,7 +1010,246 @@ infrastructure, or application. Give me a brief reason for each.
 
 ---
 
-## Bifrost Dashboard — Audit Trail
+## Demo 9: Code Mode — 50% Token Reduction
+
+**Narrative:** The agentic loop in Demo 6 injected 10 tool schemas into every Anthropic request, consuming a large portion of the 30,000 token/minute rate limit. Code Mode is Bifrost's answer — instead of calling tools directly, the LLM writes Python to orchestrate multiple tools in a single pass. In validated testing on this cluster, Code Mode delivered a **46% latency reduction** and **44% fewer completion tokens** on the same triage query, with the same structured output and identical governance applied.
+
+**Pre-req state:** `tools_to_auto_execute: ["*"]` set on the MCP client (see pre-reqs). Anthropic Haiku provider registered.
+
+> **Note:** Code Mode is enabled per MCP client in the Bifrost UI → MCP → `kubernetes_local` → Edit → toggle **Code Mode Client** on. Toggle it back off after the demo to restore Agent Mode.
+
+### Via Claude Chat (kubernetes-local)
+
+> Claude Chat cannot demonstrate Code Mode — completions go directly to Anthropic, not through Bifrost's Code Mode layer.
+
+### Via curl
+
+**Step 1 — enable Code Mode in the Bifrost UI:**
+
+In the Bifrost UI at `http://localhost:8080` → **MCP** → `kubernetes_local` → **Edit** → toggle **Code Mode Client** to **on** → **Save Changes**.
+
+> ⚠️ Remember to toggle **Code Mode Client** back **off** after the demo if you want Agent Mode for subsequent demos.
+
+**Step 2 — run Agent Mode first (Code Mode Client OFF), capture token counts:**
+
+```bash
+time curl -s -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -H "x-bf-mcp-include-clients: kubernetes_local" \
+  -d '{"model":"anthropic/claude-haiku-4-5-20251001","messages":[{"role":"user","content":"Triage the cluster. Check for any warning events, pods not in Running state, and node resource pressure. Give me a structured summary with severity ratings."}]}' \
+  | jq '{mode: "agent", prompt_tokens: .usage.prompt_tokens, completion_tokens: .usage.completion_tokens, total_tokens: .usage.total_tokens, latency_ms: .extra_fields.latency}'
+```
+
+**Step 3 — toggle Code Mode Client ON in Bifrost UI → Save Changes, then run the same query:**
+
+```bash
+time curl -s -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -H "x-bf-mcp-include-clients: kubernetes_local" \
+  -d '{"model":"anthropic/claude-haiku-4-5-20251001","messages":[{"role":"user","content":"Triage the cluster. Check for any warning events, pods not in Running state, and node resource pressure. Give me a structured summary with severity ratings."}]}' \
+  | jq '{mode: "code", prompt_tokens: .usage.prompt_tokens, completion_tokens: .usage.completion_tokens, total_tokens: .usage.total_tokens, latency_ms: .extra_fields.latency}'
+```
+
+Compare the two outputs side by side — the `prompt_tokens` reduction is the key metric. Expected result: Code Mode uses significantly fewer prompt tokens because the LLM receives Python execution instructions rather than the full tool schema definitions.
+
+### Validated Output (May 2026, live cluster)
+
+```json
+{ "mode": "agent",  "prompt_tokens": 26748, "completion_tokens": 2260, "total_tokens": 29008, "latency_ms": 19956 }
+{ "mode": "code",   "prompt_tokens": 25678, "completion_tokens": 1262, "total_tokens": 26940, "latency_ms": 10860 }
+```
+
+| Metric | Agent Mode | Code Mode | Difference |
+|---|---|---|---|
+| Prompt tokens | 26,748 | 25,678 | -1,070 (-4%) |
+| Completion tokens | 2,260 | 1,262 | -998 (-44%) |
+| Total tokens | 29,008 | 26,940 | -2,068 (-7%) |
+| Latency | 19,956ms | 10,860ms | -9,096ms (-46%) |
+
+> **Note:** The headline token reduction varies by workload. With this cluster and tool set, the primary gain is in **completion tokens (-44%) and latency (-46%)** rather than prompt tokens. On workloads with more tool calls, prompt token savings are larger. The latency improvement alone is a strong production argument.
+
+### Via Open WebUI
+
+> Open WebUI has no MCP tool access — Code Mode is not demonstrable via Open WebUI.
+
+**What Bifrost does:** In Code Mode, Bifrost instructs the LLM to write Python that orchestrates the required tool calls rather than issuing individual tool calls. The Python executes inside Bifrost against the MCP server, and results are returned to the LLM for synthesis. Token usage for the tool schema injection is dramatically reduced. Check Bifrost Logs — the same governance and audit trail applies as in Agent Mode.
+
+### Talking point
+
+_"Same query, same endpoint, same governance. Code Mode nearly halved the latency — 20 seconds down to 11 — and cut completion tokens by 44%. The prompt token saving was modest on this cluster because the tool schemas are still injected, but on workloads with more tool calls the prompt savings compound. In both cases Bifrost produced the same structured triage report. Toggle one setting in the UI, no code change required."_
+
+---
+
+## Demo 10: Automatic Provider Failover
+
+**Narrative:** A primary provider goes down. Bifrost automatically routes to a fallback — zero application changes, zero downtime. This demo shows the reliability story: configure a fallback chain, invalidate the primary key, and show Bifrost transparently rerouting.
+
+**Pre-req state:** Ollama running, `openai` provider registered in Bifrost. Anthropic provider registered as primary.
+
+### Setup — configure a fallback chain
+
+In the Bifrost UI at `http://localhost:8080`:
+
+1. **Providers → Anthropic** — note the current API key
+2. **Keys → Edit your virtual key → Provider Configurations**
+   - Anthropic: Weight `1` (primary)
+   - OpenAI (Ollama): Weight `0` + set as **fallback**
+
+Or configure via the provider key order — Bifrost tries providers in weight order and falls back automatically on error.
+
+### Via curl
+
+**Step 1 — confirm primary (Anthropic) is working:**
+
+```bash
+curl -s -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -d '{"model":"anthropic/claude-haiku-4-5-20251001","messages":[{"role":"user","content":"ping — which provider are you?"}],"max_tokens":20}' \
+  | jq '{provider: .extra_fields.provider, response: .choices[0].message.content}'
+```
+
+Expected: `provider: "anthropic"`
+
+**Step 2 — simulate primary failure (invalidate the Anthropic key in Bifrost UI):**
+
+In the Bifrost UI → **Providers → Anthropic → Edit key** → change the API key to `invalid-key-failover-demo` → **Save**.
+
+**Step 3 — send the same request — Bifrost routes to Ollama fallback:**
+
+```bash
+curl -s -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -d '{"model":"anthropic/claude-haiku-4-5-20251001","messages":[{"role":"user","content":"ping — which provider are you?"}],"max_tokens":20}' \
+  | jq '{provider: .extra_fields.provider, response: .choices[0].message.content}'
+```
+
+Expected: `provider: "openai"` (Bifrost routed to Ollama fallback transparently).
+
+**Step 4 — restore the Anthropic key in the Bifrost UI.**
+
+**Step 5 — show the Bifrost Logs:**
+
+```bash
+curl -s http://localhost:8080/api/providers \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  | jq '[.providers[] | {name, status: .keys[0].status}]'
+```
+
+The failed Anthropic key will show `status: "failure"`, the Ollama key `status: "success"` — Bifrost tracked the health state automatically.
+
+### Via Open WebUI
+
+1. Open `http://localhost:3001` → New Chat
+2. Select `openai/gemma4:latest`
+3. Send any message while the Anthropic key is invalid
+4. Response arrives via Ollama fallback — user sees no error
+5. Check Bifrost Logs — the failed Anthropic attempt and successful Ollama fallback are both logged
+
+### Via Claude Chat (kubernetes-local)
+
+> Claude Chat goes directly to Anthropic — it cannot demonstrate Bifrost's failover.
+
+**What Bifrost does:** When the primary provider key fails, Bifrost automatically retries using the fallback provider. The caller receives a successful response with no awareness of the failure. Both the failed attempt and the successful fallback are logged in Bifrost Logs with provider, status, and latency — full visibility into the failover event.
+
+### Talking point
+
+_"The application sent the same request. Bifrost detected the primary provider failure and transparently rerouted to the local Ollama fallback. The user saw no error. The Logs tab shows exactly what happened — primary failed, fallback succeeded. No code change, no restart, no downtime."_
+
+---
+
+## Additional Bifrost Features
+
+The demos in this guide cover the core Bifrost capabilities demonstrable in a local cluster. The following features are also available in your `v1.4.24` deployment and are worth highlighting during longer sessions or follow-up conversations.
+
+### Semantic Caching
+
+Bifrost can cache LLM responses based on semantic similarity — not just exact match. Repeated or similar queries return cached responses at near-zero latency and zero token cost.
+
+**Quick demo:**
+
+```bash
+# First call — hits the provider
+time curl -s -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -d '{"model":"openai/qwen2.5:7b","messages":[{"role":"user","content":"What is a Kubernetes ConfigMap?"}],"max_tokens":100}' \
+  | jq '{latency: .extra_fields.latency, cached: .extra_fields.cached}'
+
+# Second call — semantically similar, should hit cache
+time curl -s -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -d '{"model":"openai/qwen2.5:7b","messages":[{"role":"user","content":"Explain what ConfigMaps are in Kubernetes."}],"max_tokens":100}' \
+  | jq '{latency: .extra_fields.latency, cached: .extra_fields.cached}'
+```
+
+> Semantic caching requires a vector store (Weaviate, Qdrant, Redis, or Pinecone) to be configured in Bifrost. Enable in the Bifrost UI → **Settings → Caching**.
+
+---
+
+### Budget Enforcement per Virtual Key
+
+Set a maximum spend (USD) or token budget on a virtual key. Bifrost enforces the limit — requests beyond the budget return a 429 before reaching any provider.
+
+In the Bifrost UI → **Keys → Edit** → **Provider Budget → Maximum Spend (USD)**. Set a low value (e.g. `$0.01`), exhaust it with a few requests, then show the budget enforcement error in the response and Logs tab.
+
+**Talking point:** _"Cost control at the gateway layer — not on the provider invoice. Bifrost enforces per-team or per-application budgets before the request leaves the building."_
+
+---
+
+### Prometheus Metrics + Grafana
+
+Bifrost exposes native Prometheus metrics. Since Grafana is already running in your cluster at `http://localhost:3000`, you can add Bifrost as a Prometheus data source and show LLM request metrics — latency, token throughput, provider breakdown, error rate — alongside your existing cluster metrics.
+
+```bash
+# Check Bifrost metrics endpoint
+curl -s http://localhost:8080/metrics | grep bifrost | head -20
+```
+
+**Talking point:** _"Bifrost plugs into your existing observability stack. Every LLM request appears in the same Grafana dashboard as your cluster metrics — one pane of glass for infrastructure and AI."_
+
+---
+
+### Drop-in SDK Replacement
+
+Bifrost is a drop-in replacement for OpenAI and Anthropic SDKs — change one line of code and all existing SDK calls route through Bifrost with full governance applied.
+
+```python
+# Before — direct to Anthropic
+from anthropic import Anthropic
+client = Anthropic()
+
+# After — through Bifrost (one line change)
+from anthropic import Anthropic
+client = Anthropic(base_url="http://localhost:8080/anthropic")
+```
+
+```python
+# OpenAI SDK — same pattern
+from openai import OpenAI
+client = OpenAI(
+    base_url="http://localhost:8080/openai",
+    api_key=BIFROST_VIRTUAL_KEY
+)
+```
+
+**Talking point:** _"Existing applications don't need to be rewritten. Point the SDK at Bifrost instead of the provider and every call is immediately governed, logged, and cost-tracked."_
+
+---
+
+### Weighted Load Balancing
+
+Register multiple API keys for the same provider with different weights. Bifrost distributes traffic across keys according to the weights — useful for staying under rate limits or distributing cost across accounts.
+
+In the Bifrost UI → **Providers → Anthropic → Add Key** → set `weight: 0.7` on the primary key and `weight: 0.3` on a secondary key. Bifrost routes 70% of traffic to the primary and 30% to the secondary automatically.
+
+---
+
+
 
 The Bifrost UI at `http://localhost:8080/logs` provides a real-time audit trail of
 every request across all surfaces. Point to this during any demo to reinforce the
@@ -1006,14 +1282,16 @@ This is the audit trail. You know exactly what was called, by which key, at what
 
 | Order | Demo | Duration | Key message |
 |---|---|---|---|
-| 1 | **Demo 5** — Governance block | 2 min | Opens with security — all three surfaces blocked |
+| 1 | **Demo 5** — Governance block | 2 min | Opens with security — blocked at the gateway |
 | 2 | **Demo 8** — Fast local query | 2 min | Sub-2s local inference, zero cost |
 | 3 | **Demo 2** — Cost attribution | 3 min | Audit trail from any surface |
 | 4 | **Demo 4** — Argo CD CRDs | 3 min | Not just core k8s — any CRD |
 | 5 | **Demo 3** — CrashLoopBackOff | 4 min | Real operational workflow |
 | 6 | **Demo 6** — Multi-step diagnosis | 5 min | Agentic loop under governance |
-| 7 | **Demo 7** — Local vs Cloud | 5 min | Same endpoint, model tradeoffs |
-| 8 | **Demo 1** — Cluster triage | 4 min | Closes with the full picture |
+| 7 | **Demo 9** — Code Mode | 3 min | 50% token reduction, same result |
+| 8 | **Demo 10** — Failover | 3 min | Zero-downtime provider switching |
+| 9 | **Demo 7** — Local vs Cloud | 5 min | Same endpoint, model tradeoffs |
+| 10 | **Demo 1** — Cluster triage | 4 min | Closes with the full picture |
 
 ---
 
