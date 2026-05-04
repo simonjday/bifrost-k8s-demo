@@ -29,7 +29,7 @@ lsof -i :11434 | grep -E '\*|0\.0\.0\.0'
 # Quick end-to-end check
 curl -s http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "X-Api-Key: sk-bf-0b7391e8-12b3-45f7-bf83-69f6f8910115" \
+  -H "X-Api-Key: sk-bf-0b7391e8-12b3-45f7-xxxxx" \
   -d '{"model":"openai/qwen2.5:7b","messages":[{"role":"user","content":"ping"}],"max_tokens":5}' \
   | jq '.choices[0].message.content'
 ```
@@ -43,7 +43,7 @@ These curl commands tell a complete story about Bifrost's capabilities in sequen
 ### Setup — Virtual Key Variables
 
 ```bash
-export KEY_ALL="sk-bf-0b7391e8-12b3-45f7-bf83-69f6f8910115"   # unrestricted key
+export KEY_ALL="sk-bf-0b7391e8-12b3-45f7-bf83-xxxx"   # unrestricted key
 export KEY_RESTRICTED="<your-restricted-key>"                   # llama3.2:3b only
 export BIFROST="http://localhost:8080"
 ```
