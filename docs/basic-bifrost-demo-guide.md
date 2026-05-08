@@ -29,8 +29,8 @@ lsof -i :11434 | grep -E '\*|0\.0\.0\.0'
 # Quick end-to-end check
 curl -s http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "X-Api-Key: sk-bf-0b7391e8-12b3-45f7-xxxxx" \
-  -d '{"model":"openai/qwen2.5:7b","messages":[{"role":"user","content":"ping"}],"max_tokens":5}' \
+  -H "X-Api-Key: <your-admin-key>" \
+  -d '{"model":"openai/llama3.2:3b","messages":[{"role":"user","content":"ping"}],"max_tokens":5}' \
   | jq '.choices[0].message.content'
 ```
 
@@ -38,36 +38,21 @@ curl -s http://localhost:8080/v1/chat/completions \
 
 ## Part 1 — curl Demo
 
-These curl commands tell a complete story about Bifrost's capabilities in sequence. Run them in order for maximum impact.
+These commands tell a complete story about Bifrost's capabilities in sequence. Run them in order for maximum demo impact.
 
 ### Setup — Virtual Key Variables
 
 ```bash
-export KEY_ALL="sk-bf-0b7391e8-12b3-45f7-bf83-xxxx"   # unrestricted key
-export KEY_RESTRICTED="<your-restricted-key>"                   # llama3.2:3b only
+export KEY_ALL="<your-admin-key>"
+export KEY_RESTRICTED="<your-restricted-key>"
 export BIFROST="http://localhost:8080"
 ```
+
+> The admin key has unrestricted access to all models and MCP tools. The restricted key is scoped to `llama3.2:3b` only and 7 read-only Kubernetes MCP tools.
 
 ---
 
 ### 1. Basic Routing — Bifrost forwards to Ollama
-
-```bash
-curl -s $BIFROST/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $KEY_ALL" \
-  -d '{
-    "model": "openai/qwen2.5:7b",
-    "messages": [{"role":"user","content":"In one sentence, what is an AI gateway?"}],
-    "max_tokens": 60
-  }' | jq '{model, response: .choices[0].message.content, latency_ms: .extra_fields.latency}'
-```
-
-**What it shows:** Single endpoint, local model, sub-second latency.
-
----
-
-### 2. Model Switching — Same endpoint, different model
 
 ```bash
 curl -s $BIFROST/v1/chat/completions \
@@ -80,7 +65,24 @@ curl -s $BIFROST/v1/chat/completions \
   }' | jq '{model, response: .choices[0].message.content, latency_ms: .extra_fields.latency}'
 ```
 
-**What it shows:** Switch from `qwen2.5:7b` to `llama3.2:3b` with no config change — same endpoint, same key.
+**What it shows:** Single endpoint, local model, latency visible in the response.
+
+---
+
+### 2. Model Switching — Same endpoint, different model
+
+```bash
+curl -s $BIFROST/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $KEY_ALL" \
+  -d '{
+    "model": "openai/qwen2.5:7b",
+    "messages": [{"role":"user","content":"In one sentence, what is an AI gateway?"}],
+    "max_tokens": 60
+  }' | jq '{model, response: .choices[0].message.content, latency_ms: .extra_fields.latency}'
+```
+
+**What it shows:** Switch models with a single string change — same endpoint, same key, no config change.
 
 ---
 
@@ -97,7 +99,9 @@ curl -s $BIFROST/v1/chat/completions \
   }' | jq '{model, response: .choices[0].message.content}'
 ```
 
-**What it shows:** Route to a specialist code model transparently — no code changes needed in the calling application.
+**What it shows:** Route to a specialist code model transparently — no changes needed in the calling application.
+
+> Note: Use `qwen2.5-coder:7b` (instruct variant). The `qwen2.5-coder:1.5b-base` base model does not support chat completions and will return a 400 error.
 
 ---
 
@@ -108,7 +112,7 @@ curl -s $BIFROST/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: $KEY_ALL" \
   -d '{
-    "model": "openai/qwen2.5:7b",
+    "model": "openai/llama3.2:3b",
     "messages": [{"role":"user","content":"List 3 benefits of running LLMs locally."}],
     "max_tokens": 150,
     "stream": true
@@ -126,7 +130,7 @@ curl -s $BIFROST/v1/models \
   -H "X-Api-Key: $KEY_ALL" | jq '.data[].id'
 ```
 
-**What it shows:** Bifrost exposes all registered models via the standard OpenAI models endpoint.
+**What it shows:** Bifrost exposes all registered models via the standard OpenAI-compatible models endpoint.
 
 ---
 
@@ -182,7 +186,7 @@ curl -s $BIFROST/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: sk-invalid-key" \
   -d '{
-    "model": "openai/qwen2.5:7b",
+    "model": "openai/llama3.2:3b",
     "messages": [{"role":"user","content":"ping"}],
     "max_tokens": 10
   }' | jq .
@@ -192,14 +196,14 @@ curl -s $BIFROST/v1/chat/completions \
 
 ---
 
-### 9. Full Metadata — Show audit trail fields
+### 9. Full Metadata — Audit trail fields
 
 ```bash
 curl -s $BIFROST/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: $KEY_ALL" \
   -d '{
-    "model": "openai/qwen2.5:7b",
+    "model": "openai/llama3.2:3b",
     "messages": [{"role":"user","content":"ping"}],
     "max_tokens": 10
   }' | jq '{
@@ -212,7 +216,21 @@ curl -s $BIFROST/v1/chat/completions \
   }'
 ```
 
-**What it shows:** Every request carries full audit metadata — provider, model, latency, token usage — available in the Bifrost UI Logs tab.
+**What it shows:** Every request carries full audit metadata — provider, model, latency, token usage — visible in the Bifrost UI Logs tab.
+
+---
+
+### 10. Traffic Simulation — Generate metrics data
+
+To populate the Bifrost dashboard and Prometheus metrics with realistic data:
+
+```bash
+bash scripts/bifrost-sim.sh
+# Or for more requests:
+bash scripts/bifrost-sim.sh 100
+```
+
+After the script completes, check the Bifrost dashboard at `http://localhost:8080` — request volume, token usage, model rankings and latency charts will be populated. Wait ~30 seconds for Prometheus to scrape the updated metrics.
 
 ---
 
@@ -226,7 +244,7 @@ Open WebUI is a self-hosted ChatGPT-style interface. Pointed at Bifrost, it give
 Browser → Open WebUI :3001 → Bifrost :8080 → Ollama :11434 (local models)
 ```
 
-> ⚠️ Port `3000` is used by Grafana in this environment. Open WebUI runs on `3001`.
+> Port `3000` is used by Grafana in this environment. Open WebUI runs on `3001`.
 
 ### Install and Run
 
@@ -237,13 +255,13 @@ docker run -d \
   --name open-webui \
   -p 3001:8080 \
   -e OPENAI_API_BASE_URL=http://host.docker.internal:8080/v1 \
-  -e OPENAI_API_KEY=sk-bf-0b7391e8-12b3-45f7-bf83-xxxxx \
+  -e OPENAI_API_KEY=<your-admin-key> \
   -v open-webui:/app/backend/data \
   --restart always \
   ghcr.io/open-webui/open-webui:main
 ```
 
-> ⚠️ `host.docker.internal` resolves to the Mac host from inside Docker — this routes Open WebUI → Bifrost on your Mac. Do not use `localhost` here.
+> `host.docker.internal` resolves to the Mac host from inside Docker, routing Open WebUI → Bifrost. Do not use `localhost` here.
 
 **Option B — Docker Compose:**
 
@@ -255,7 +273,7 @@ services:
       - "3001:8080"
     environment:
       OPENAI_API_BASE_URL: http://host.docker.internal:8080/v1
-      OPENAI_API_KEY: sk-bf-0b7391e8-12b3-45f7-bf83-xxxxxxx
+      OPENAI_API_KEY: <your-admin-key>
     volumes:
       - open-webui:/app/backend/data
     restart: always
@@ -276,17 +294,15 @@ Open `http://localhost:3001` in your browser. On first launch, create an admin a
 
 In the model dropdown you will see all models registered in Bifrost (the same ones returned by `GET /v1/models`). Select any `openai/` prefixed model to route through Bifrost to Ollama.
 
-### Verify Bifrost is in the path
+### Verify Bifrost is in the Path
 
-After sending a message, check the Bifrost UI **Logs** tab at `http://localhost:8080` — you should see the request appear with provider `openai`, the model name, latency, and token counts.
+After sending a message, check the Bifrost UI **Logs** tab at `http://localhost:8080` — the request will appear with provider, model, latency, and token counts.
 
 ---
 
 ## Demo Story — Talking Points
 
-Run these in order for a complete demo narrative:
-
-| Step | curl # | What you say |
+| Step | Command | What you say |
 |---|---|---|
 | Single endpoint | 1 | "One URL for all models — local or cloud" |
 | Model switch | 2 | "Change the model string, nothing else changes" |
@@ -297,6 +313,7 @@ Run these in order for a complete demo narrative:
 | Blocked access | 7 | "Other models are rejected at the gateway" |
 | Auth rejection | 8 | "Unknown keys never reach the backend" |
 | Audit trail | 9 | "Every request is logged with full metadata" |
+| Traffic sim | 10 | "Generate load to see the dashboard and Prometheus metrics populate" |
 | Open WebUI | — | "This is what a real user sees" |
 
 ---
@@ -305,10 +322,14 @@ Run these in order for a complete demo narrative:
 
 | Item | Value |
 |---|---|
-| Bifrost endpoint | `http://localhost:8080/v1/chat/completions` |
-| Models endpoint | `http://localhost:8080/v1/models` |
+| Bifrost completions | `http://localhost:8080/v1/chat/completions` |
+| Bifrost models | `http://localhost:8080/v1/models` |
+| Bifrost MCP endpoint | `http://localhost:8080/mcp` |
 | Bifrost UI / Logs | `http://localhost:8080` |
 | Open WebUI | `http://localhost:3001` |
+| Grafana | `http://localhost:3000` |
+| Prometheus | `http://localhost:9090` |
 | Auth header | `X-Api-Key: <virtual-key>` |
-| Model prefix | `openai/<modelname>` |
+| Model prefix (Ollama) | `openai/<modelname>` |
+| Model prefix (Anthropic) | `anthropic/<modelname>` |
 | Start port-forward | `kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &` |
