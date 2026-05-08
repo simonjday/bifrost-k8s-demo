@@ -5,62 +5,52 @@ A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/
 ## What This Repo Contains
 
 ```
-bifrost-k8s-demo/
+bifrost-k8s-demo
+├── docs
+│   ├── Additional-MCP-Server-Guides
+│   │   ├── Argo CD MCP Server — Deployment Guide.md
+│   │   ├── AWS MCP Server — Deployment & Demo Guide.md
+│   │   ├── Azure MCP Server — Deployment & Demo Guide.md
+│   │   ├── Datadog MCP Server — Deployment & Demo Guide.md
+│   │   ├── Dynatrace MCP Server — Deployment & Demo Guide.md
+│   │   ├── GitHub MCP Server — Deployment & Demo Guide.md
+│   │   └── Grafana MCP Server — Deployment & Demo Guide.md
+│   ├── bifrost-analysis.md
+│   ├── demo-guide.md
+│   ├── gateway-comparison.md
+│   ├── network-flow.svg
+│   ├── ollama-bifrost-setup.md
+│   ├── Prometheus MCP Server — Deployment & Demo Guide.md
+│   ├── README.md
+│   └── screenshots
+│       ├── access-denied-delete-pod.png
+│       ├── bifrost-access-control.png
+│       ├── bifrost-dashboard.png
+│       ├── bifrost-latency-p99.png
+│       ├── bifrost-llm-logs.png
+│       ├── bifrost-logs.png
+│       ├── bifrost-mcp-catalog.png
+│       ├── bifrost-total-requests.png
+│       ├── cpu-usage-by-pod.png
+│       ├── instant-query-up-targets.png
+│       ├── owui-basic-chat.png
+│       ├── owui-gemma4-triage-response.png
+│       ├── owui-model-comparison.png
+│       ├── owui-model-selector.png
+│       ├── pods-in-namespace-restricted.png
+│       └── prometheus-mcp-running.png
+├── manifests
+│   ├── bifrost-values-dev.yaml
+│   ├── bifrost-values-prod.yaml
+│   ├── mcp-kubernetes-host-svc.yaml
+│   ├── mcp-kubernetes-proxy-kind.yaml
+│   └── namespace.yaml
+├── postman
+│   └── bifrost-k8s-mcp.postman_collection.json
 ├── README.md
-├── demo-sh-scripts/
-│   ├── 01-governance-block.sh
-│   ├── 02-cost-attribution.sh
-│   ├── 03-crashloop-diagnosis.sh
-│   ├── 04-argocd-status.sh
-│   ├── 05-kargo-pipeline.sh
-│   ├── 06-llm-triage.sh
-│   ├── 07-multi-tool-correlation.sh
-│   ├── 08-local-vs-cloud.sh
-│   └── 09-ollama-fast-query.sh
-├── docs/
-│   ├── README.md                                          # Docs index
-│   ├── demo-guide.md                                      # Primary demo playbook — 11 demos
-│   ├── Prometheus MCP Server — Deployment & Demo Guide.md # Prometheus MCP setup + blog post
-│   ├── ollama-bifrost-setup.md                            # Ollama config + Claude Desktop integration
-│   ├── bifrost-analysis.md                                # Bifrost vendor analysis + test scenarios
-│   ├── gateway-comparison.md                              # Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone
-│   ├── network-flow.svg
-│   ├── Additional-MCP-Server-Guides/
-│   │   ├── Argo CD MCP Server — Deployment Guide.md
-│   │   ├── AWS MCP Server — Deployment & Demo Guide.md
-│   │   ├── Azure MCP Server — Deployment & Demo Guide.md
-│   │   ├── Datadog MCP Server — Deployment & Demo Guide.md
-│   │   ├── Dynatrace MCP Server — Deployment & Demo Guide.md
-│   │   ├── GitHub MCP Server — Deployment & Demo Guide.md
-│   │   └── Grafana MCP Server — Deployment & Demo Guide.md
-│   └── screenshots/
-│       ├── access-denied-delete-pod.png
-│       ├── bifrost-access-control.png
-│       ├── bifrost-dashboard.png
-│       ├── bifrost-latency-p99.png
-│       ├── bifrost-llm-logs.png
-│       ├── bifrost-logs.png
-│       ├── bifrost-mcp-catalog.png
-│       ├── bifrost-total-requests.png
-│       ├── cpu-usage-by-pod.png
-│       ├── instant-query-up-targets.png
-│       ├── owui-basic-chat.png
-│       ├── owui-gemma4-triage-response.png
-│       ├── owui-model-comparison.png
-│       ├── owui-model-selector.png
-│       ├── pods-in-namespace-restricted.png
-│       └── prometheus-mcp-running.png
-├── manifests/
-│   ├── bifrost-values-dev.yaml
-│   ├── bifrost-values-prod.yaml
-│   ├── mcp-kubernetes-host-svc.yaml
-│   ├── mcp-kubernetes-proxy-kind.yaml
-│   └── namespace.yaml
-├── postman/
-│   └── bifrost-k8s-mcp.postman_collection.json            # 40 requests, 5 folders, Postman visualizers
-└── scripts/
-    ├── bifrost-sim.sh                                      # Traffic simulator for Ollama models
-    ├── com.local.mcp-kubernetes-sse.plist                  # macOS LaunchAgent for kubernetes-mcp-server
+└── scripts
+    ├── bifrost-sim.sh
+    ├── com.local.mcp-kubernetes-sse.plist
     ├── install.sh
     ├── start-mcp-server.sh
     ├── teardown.sh
