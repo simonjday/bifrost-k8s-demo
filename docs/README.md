@@ -18,6 +18,7 @@
 | [Dynatrace MCP Server — Deployment & Demo Guide.md](Additional-MCP-Server-Guides/Dynatrace%20MCP%20Server%20—%20Deployment%20%26%20Demo%20Guide.md) | Dynatrace MCP server setup and demo scenarios |
 | [GitHub MCP Server — Deployment & Demo Guide.md](Additional-MCP-Server-Guides/GitHub%20MCP%20Server%20—%20Deployment%20%26%20Demo%20Guide.md) | GitHub MCP server setup and demo scenarios |
 | [Grafana MCP Server — Deployment & Demo Guide.md](Additional-MCP-Server-Guides/Grafana%20MCP%20Server%20—%20Deployment%20%26%20Demo%20Guide.md) | Grafana MCP server setup and demo scenarios |
+| [prometheus-grafana-bifrost.md](prometheus-grafana-bifrost.md) | Bifrost metrics in Prometheus & Grafana — ServiceMonitor setup, verifying scraping, importing the two provided Grafana dashboards |
 
 ## Reference
 

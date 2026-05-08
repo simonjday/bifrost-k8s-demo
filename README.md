@@ -450,3 +450,4 @@ curl -s -X POST http://localhost:8080/mcp \
 | [docs/bifrost-analysis.md](docs/bifrost-analysis.md) | Bifrost vendor analysis, test scenarios |
 | [docs/gateway-comparison.md](docs/gateway-comparison.md) | Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone |
 | [docs/Additional-MCP-Server-Guides/](docs/Additional-MCP-Server-Guides/) | Setup guides for ArgoCD, AWS, Azure, Datadog, Dynatrace, GitHub, Grafana MCP servers |
+| [docs/prometheus-grafana-bifrost.md](docs/prometheus-grafana-bifrost.md) | Bifrost metrics in Prometheus & Grafana — ServiceMonitor, dashboard import, PromQL reference |
