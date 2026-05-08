@@ -1,55 +1,79 @@
 # Bifrost AI Gateway — Local Cluster Demo
 
-A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/bifrost) on a local k3d or kind cluster, including Kubernetes MCP tool integration, Ollama local model support, and governed agentic workflows.
+A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/bifrost) on a local kind cluster, including Kubernetes MCP tool integration, Prometheus MCP observability, Ollama local model support, and governed agentic workflows.
 
 ## What This Repo Contains
 
 ```
 bifrost-k8s-demo/
-├── README.md                                  # This file
+├── README.md
+├── demo-sh-scripts/
+│   ├── 01-governance-block.sh
+│   ├── 02-cost-attribution.sh
+│   ├── 03-crashloop-diagnosis.sh
+│   ├── 04-argocd-status.sh
+│   ├── 05-kargo-pipeline.sh
+│   ├── 06-llm-triage.sh
+│   ├── 07-multi-tool-correlation.sh
+│   ├── 08-local-vs-cloud.sh
+│   └── 09-ollama-fast-query.sh
 ├── docs/
-│   ├── network-flow.svg                       # MCP network flow diagram (k3d + kind)
-│   ├── demo-guide.md                          # Complete demo playbook (pre-reqs, curl commands)
-│   ├── gateway-comparison.md                  # Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone
-│   ├── bifrost-openwebui-demo-scenarios.md    # Step-by-step Open WebUI demo scenarios
-│   └── screenshots/                           # Demo screenshots (PNG)
-│       ├── owui-model-selector.png
-│       ├── owui-basic-chat.png
-│       ├── owui-model-comparison.png
+│   ├── README.md                                          # Docs index
+│   ├── demo-guide.md                                      # Primary demo playbook — 11 demos
+│   ├── Prometheus MCP Server — Deployment & Demo Guide.md # Prometheus MCP setup + blog post
+│   ├── ollama-bifrost-setup.md                            # Ollama config + Claude Desktop integration
+│   ├── bifrost-analysis.md                                # Bifrost vendor analysis + test scenarios
+│   ├── gateway-comparison.md                              # Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone
+│   ├── network-flow.svg
+│   ├── Additional-MCP-Server-Guides/
+│   │   ├── Argo CD MCP Server — Deployment Guide.md
+│   │   ├── AWS MCP Server — Deployment & Demo Guide.md
+│   │   ├── Azure MCP Server — Deployment & Demo Guide.md
+│   │   ├── Datadog MCP Server — Deployment & Demo Guide.md
+│   │   ├── Dynatrace MCP Server — Deployment & Demo Guide.md
+│   │   ├── GitHub MCP Server — Deployment & Demo Guide.md
+│   │   └── Grafana MCP Server — Deployment & Demo Guide.md
+│   └── screenshots/
+│       ├── access-denied-delete-pod.png
+│       ├── bifrost-access-control.png
+│       ├── bifrost-dashboard.png
+│       ├── bifrost-latency-p99.png
+│       ├── bifrost-llm-logs.png
 │       ├── bifrost-logs.png
-│       └── bifrost-access-control.png
+│       ├── bifrost-mcp-catalog.png
+│       ├── bifrost-total-requests.png
+│       ├── cpu-usage-by-pod.png
+│       ├── instant-query-up-targets.png
+│       ├── owui-basic-chat.png
+│       ├── owui-gemma4-triage-response.png
+│       ├── owui-model-comparison.png
+│       ├── owui-model-selector.png
+│       ├── pods-in-namespace-restricted.png
+│       └── prometheus-mcp-running.png
 ├── manifests/
-│   ├── namespace.yaml                         # ai-gateway namespace
-│   ├── bifrost-values-dev.yaml                # Helm values for local dev install
-│   ├── bifrost-values-prod.yaml               # Helm values for production HA install
-│   ├── mcp-kubernetes-host-svc.yaml           # Service + Endpoints for k3d (Mac LAN IP)
-│   └── mcp-kubernetes-proxy-kind.yaml         # socat proxy Deployment + Service for kind
-├── scripts/
-│   ├── install.sh                             # Full install: Bifrost + MCP + providers
-│   ├── teardown.sh                            # Clean teardown (dry-run by default)
-│   ├── start-mcp-server.sh                    # One-shot: apply k8s svc + start SSE server
-│   ├── com.local.mcp-kubernetes-sse.plist     # macOS Launch Agent for kubernetes-mcp-server
-│   └── warmup-ollama.sh                       # Pre-warm Ollama models before demo
-└── demos/
-    ├── 01-basic-routing.sh                    # Demo 1: Single endpoint, multiple models
-    ├── 02-cost-attribution.sh                 # Demo 2: Namespace resource consumption
-    ├── 03-crashloop-diagnosis.sh              # Demo 3: Pod diagnosis workflow
-    ├── 04-argocd-status.sh                    # Demo 4: Argo CD CRD queries
-    ├── 05-governance-block.sh                 # Demo 5: Destructive tool blocking
-    ├── 06-lm-triage.sh                        # Demo 6: LLM-driven cluster triage (agent mode)
-    ├── 07-multi-tool-correlation.sh           # Demo 7: Pods + Argo CD correlation
-    ├── 08-local-vs-cloud.sh                   # Demo 8: Ollama vs Anthropic comparison
-    └── 09-ollama-fast-query.sh                # Demo 9: Sub-2s local model query
+│   ├── bifrost-values-dev.yaml
+│   ├── bifrost-values-prod.yaml
+│   ├── mcp-kubernetes-host-svc.yaml
+│   ├── mcp-kubernetes-proxy-kind.yaml
+│   └── namespace.yaml
+├── postman/
+│   └── bifrost-k8s-mcp.postman_collection.json            # 40 requests, 5 folders, Postman visualizers
+└── scripts/
+    ├── bifrost-sim.sh                                      # Traffic simulator for Ollama models
+    ├── com.local.mcp-kubernetes-sse.plist                  # macOS LaunchAgent for kubernetes-mcp-server
+    ├── install.sh
+    ├── start-mcp-server.sh
+    ├── teardown.sh
+    └── warmup-ollama.sh
 ```
 
 ## Prerequisites
 
-- k3d or kind cluster running
+- kind cluster running (`kind-devops-lab`)
 - Helm 3.x
 - kubectl configured for the cluster
 - Anthropic API key
-- Ollama installed on Mac (`brew install ollama`)
-- Node.js 18+ / npx (for `kubernetes-mcp-server`)
+- Ollama installed on Mac (`brew install ollama`) with `OLLAMA_HOST=0.0.0.0`
 - Docker Desktop for Mac
 
 ## Quick Start
@@ -59,336 +83,276 @@ bifrost-k8s-demo/
 git clone https://github.com/simonjday/bifrost-k8s-demo.git
 cd bifrost-k8s-demo
 
-# 2. Run the install script (auto-detects k3d vs kind)
-./scripts/install.sh --apply
-# Or target a specific context:
+# 2. Run the install script
 ./scripts/install.sh --apply --context kind-devops-lab
 
-# 3. Install the MCP server Launch Agent (runs automatically on login)
+# 3. Install the kubernetes MCP server LaunchAgent
 cp scripts/com.local.mcp-kubernetes-sse.plist ~/Library/LaunchAgents/
 launchctl load -w ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 
-# 4. Port-forward Bifrost
+# 4. Start port-forwards
 kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090 &
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80 &
+kubectl -n argocd port-forward svc/argocd-server 9080:80 &
 
-# 5. Export your Bifrost virtual key (get from http://localhost:8080 → Keys)
-export BIFROST_VIRTUAL_KEY="vk_your_key_here"
+# 5. Export your virtual keys (get from http://localhost:8080 → Keys)
+export KEY_ALL="<your-admin-key>"
+export KEY_RESTRICTED="<your-restricted-key>"
 
-# 6. Verify Bifrost is connected (should show state: connected, tool_count: 20)
-curl -s http://localhost:8080/api/mcp/clients | \
-  jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
-
-# 7. Run any demo
-./demos/01-basic-routing.sh
+# 6. Verify both MCP servers are connected (should show 48 total tools)
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $KEY_ALL" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | jq '[.result.tools[].name] | group_by(split("-")[0]) | map({prefix: .[0] | split("-")[0], count: length})'
+# Expected: new_kubernetes_local: 20, prometheus: 28
 ```
 
-> **Note:** After running the install script, register the MCP server manually in the Bifrost UI:
-> **MCP → New MCP Server → Name:** `kubernetes_local` **→ Type:** SSE
-> **→ URL:** `http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse` **→ Auth:** None
+After running the install script, register both MCP servers manually in the Bifrost UI:
+
+**Kubernetes MCP:**
+- **MCP Gateway → New MCP Server → Name:** `new_kubernetes_local`
+- **Type:** Server-Sent Events (SSE)
+- **URL:** `http://192.168.1.21:8811/sse`
+
+**Prometheus MCP:**
+- **MCP Gateway → New MCP Server → Name:** `prometheus`
+- **Type:** HTTP (Streamable)
+- **URL:** `http://prometheus-mcp.monitoring.svc.cluster.local:8080/mcp`
+
+> After creating each server, go to **Virtual Keys** and explicitly grant access to the server for each key that needs it.
 
 ---
 
 ## Architecture
 
-The diagram below shows how each client surface routes requests — and where Bifrost governance applies. Claude Chat bypasses Bifrost entirely for both tool calls and completions. Only curl and Open WebUI route through Bifrost and are subject to its auth, allow-list, and audit logging.
+### MCP Servers
+
+Two MCP servers are registered with Bifrost, providing 48 tools in total:
+
+| Server | Tools | Connection | Prefix |
+|---|---|---|---|
+| `new_kubernetes_local` | 20 | SSE → `http://192.168.1.21:8811/sse` | `new_kubernetes_local-` |
+| `prometheus` | 28 | HTTP (Streamable) → in-cluster `:8080/mcp` | `prometheus-` |
+
+### Request Routing
 
 ```mermaid
 flowchart LR
-    CC["Claude Chat"]
-    CU["curl"]
+    CU["curl / Postman"]
     OW["Open WebUI"]
     BF["Bifrost :8080\nAuth · Allow-list · Log"]
     AN["Anthropic API"]
     OL["Ollama :11434"]
-    MCP["kubernetes-mcp-server\n:8811"]
+    KM["kubernetes-mcp-server\n:8811"]
+    PM["prometheus-mcp\nmonitoring ns"]
 
-    CC -->|"tool calls\ndirect stdio"| MCP
-    CC -->|"completions\ndirect"| AN
-    CU -->|"MCP tool calls"| BF
-    CU -->|"LLM completions"| BF
+    CU -->|"MCP tool calls\nLLM completions"| BF
     OW -->|"completions only"| BF
     BF --> AN
     BF --> OL
-    BF --> MCP
+    BF --> KM
+    BF --> PM
 
-    style CC fill:#AFA9EC,stroke:#534AB7,color:#26215C
     style CU fill:#F0997B,stroke:#993C1D,color:#4A1B0C
     style OW fill:#EF9F27,stroke:#854F0B,color:#412402
     style BF fill:#85B7EB,stroke:#185FA5,color:#042C53
     style AN fill:#B4B2A9,stroke:#5F5E5A,color:#2C2C2A
     style OL fill:#97C459,stroke:#3B6D11,color:#173404
-    style MCP fill:#5DCAA5,stroke:#0F6E56,color:#04342C
-
-    linkStyle 0 stroke:#888780,stroke-dasharray:5 5
-    linkStyle 1 stroke:#888780,stroke-dasharray:5 5
-    linkStyle 2 stroke:#378ADD
-    linkStyle 3 stroke:#378ADD
-    linkStyle 4 stroke:#378ADD
+    style KM fill:#5DCAA5,stroke:#0F6E56,color:#04342C
+    style PM fill:#a78bfa,stroke:#6d28d9,color:#2e1065
 ```
 
-> **Key point:** Dashed arrows bypass Bifrost and are not governed or logged. Solid arrows pass through Bifrost and are subject to auth, tool allow-list enforcement, model access control, and full audit logging.
-
-
-### k3d
+### kind Cluster Networking
 
 ```
 Mac Host
-├── Ollama (0.0.0.0:11434) ──────────────────────────────────┐
-├── kubernetes-mcp-server SSE (0.0.0.0:8811) ────────────────┐│
-│   └── macOS Launch Agent (auto-start/restart on login)      ││
-│                                                              ││
-└── k3d cluster (Docker)                                       ││
-    └── ai-gateway namespace                                   ││
-        ├── bifrost-0 → localhost:8080 (port-forward)          ││
-        ├── mcp-kubernetes-sse Service                         ││
-        │   └── Endpoints: 192.168.1.21:8811 ────────────────►┘│
-        │       (Mac LAN IP — directly reachable from k3d)      │
-        └── openai provider → 192.168.1.21:11434 ─────────────►┘
+├── Ollama (0.0.0.0:11434)
+├── kubernetes-mcp-server SSE (0.0.0.0:8811)
+│   └── macOS LaunchAgent (auto-start/restart on login)
+│
+└── kind cluster (Docker Desktop)
+    └── ai-gateway namespace
+        ├── bifrost-0 → localhost:8080 (port-forward)
+        │   └── openai provider → 192.168.1.21:11434
+        │   └── new_kubernetes_local SSE → 192.168.1.21:8811
+        └── monitoring namespace
+            ├── kube-prometheus-stack
+            └── prometheus-mcp → http (streamable) → Prometheus API
 ```
 
-### kind
+The Mac's LAN IP (`192.168.1.21`) is directly reachable from kind pods via Docker Desktop network bridging — no proxy pod required.
+
+### Prometheus Metrics Flow
+
+Bifrost exposes `/metrics` on port 8080. A ServiceMonitor (label `release: kube-prometheus-stack`) scrapes it every 15 seconds. The `prometheus-mcp` pod wraps the `prometheus-mcp-server` binary via supergateway, making all 28 Prometheus tools available through Bifrost's MCP endpoint.
 
 ```
-Mac Host
-├── Ollama (0.0.0.0:11434) ──────────────────────────────────┐
-├── kubernetes-mcp-server SSE (0.0.0.0:8811) ────────────────┐│
-│   └── macOS Launch Agent (auto-start/restart on login)      ││
-│                                                              ││
-└── kind cluster (Docker)                                      ││
-    └── ai-gateway namespace                                   ││
-        ├── bifrost-0 → localhost:8080 (port-forward)          ││
-        ├── mcp-kubernetes-sse Service                         ││
-        │   └── mcp-kubernetes-proxy pod (socat)               ││
-        │       └── 192.168.65.254:8811 ──────────────────────►┘│
-        │           (Docker host gateway — reachable from kind)  │
-        └── openai provider → 192.168.65.254:11434 ────────────►┘
+Bifrost pod → /metrics → Prometheus (ServiceMonitor) → prometheus-mcp → Bifrost /mcp
 ```
-
-### Network Flow
-
-![MCP network flow diagram](docs/network-flow.svg)
-
-- **k3d** — Bifrost pod → `mcp-kubernetes-sse` Service → Endpoints (`192.168.1.21`) → Mac MCP server. k3d pods reach the Mac LAN IP directly via the Docker bridge.
-- **kind** — Bifrost pod → `mcp-kubernetes-sse` Service → `mcp-kubernetes-proxy` pod (socat) → `192.168.65.254` → Mac MCP server. kind pods cannot route to the Mac LAN IP so traffic is proxied via socat.
-- **Claude Desktop** uses a separate stdio instance of `kubernetes-mcp-server` — independent of the SSE server.
-- **curl / LLM clients** reach Bifrost via `kubectl port-forward` on `localhost:8080`.
 
 ---
 
-## MCP Server — Launch Agent Setup
+## MCP Server — Kubernetes LaunchAgent Setup
 
-The `kubernetes-mcp-server` runs as a macOS Launch Agent so it starts automatically at login and restarts on crash. It exposes `/sse`, `/mcp`, and `/healthz` on port `8811`.
+The `kubernetes-mcp-server` runs as a macOS LaunchAgent, starts automatically at login, and restarts on crash.
 
 ### Install (one-time)
 
 ```bash
-# 1. Install the Launch Agent
+# 1. Install the LaunchAgent
 cp scripts/com.local.mcp-kubernetes-sse.plist ~/Library/LaunchAgents/
 launchctl load -w ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 
 # 2. Verify it is running
-lsof -i :8811 | grep LISTEN       # should show *:8811 (LISTEN)
-curl -s http://localhost:8811/healthz && echo OK
+curl -v --max-time 5 http://localhost:8811/sse
+# Expected: event: endpoint
 
-# 3. Apply k8s networking (install.sh does this automatically)
-# k3d:
-kubectl apply -f manifests/mcp-kubernetes-host-svc.yaml
-# kind:
-kubectl apply -f manifests/mcp-kubernetes-proxy-kind.yaml
-
-# 4. Verify in-cluster connectivity
+# 3. Verify reachability from inside the Bifrost pod
 kubectl exec -n ai-gateway bifrost-0 -- \
-  wget -qO- http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/healthz \
-  && echo "In-cluster: OK"
+  wget -qO- http://192.168.1.21:8811/sse --timeout=3 2>&1 | head -2
+# Expected: event: endpoint
 ```
 
-### Verify the MCP Integration
+### Verify MCP Integration
 
 ```bash
-# Check Bifrost client state
-curl -s http://localhost:8080/api/mcp/clients | \
-  jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
-# Expected: { "state": "connected", "tool_count": 20 }
-
-# Discover available tools
+# Check all tools registered
 curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
-  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -H "X-Api-Key: $KEY_ALL" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
-  | jq '[.result.tools[].name]'
+  | jq '[.result.tools[].name] | group_by(split("-")[0]) | map({prefix: .[0] | split("-")[0], count: length})'
 
-# Call a tool directly
+# Call a Kubernetes tool
 curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
-  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"kubernetes_local-pods_list_in_namespace","arguments":{"namespace":"ai-gateway"}}}'
+  -H "X-Api-Key: $KEY_ALL" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"new_kubernetes_local-pods_list_in_namespace","arguments":{"namespace":"ai-gateway"}}}' \
+  | jq -r '.result.content[0].text'
 
-# Call a tool via LLM in agentic mode
+# Call a Prometheus tool
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $KEY_ALL" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"prometheus-healthy","arguments":{}}}' \
+  | jq -r '.result.content[0].text'
+
+# Agentic mode — LLM calls Kubernetes tools autonomously
 curl -s -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
-  -d '{"model":"anthropic/claude-sonnet-4-5-20250929","messages":[{"role":"user","content":"List all pods in the ai-gateway namespace"}],"tools":"mcp::kubernetes_local"}'
+  -H "X-Api-Key: $KEY_ALL" \
+  -H "x-bf-mcp-include-clients: new_kubernetes_local" \
+  -d '{"model":"anthropic/claude-haiku-4-5-20251001","messages":[{"role":"user","content":"List all pods in the ai-gateway namespace"}]}' \
+  | jq -r '.choices[0].message.content'
 ```
 
-### Logs and Management
+### LaunchAgent Management
 
 ```bash
 # Logs
-tail -f /tmp/mcp-kubernetes-sse.log   # stdout
-tail -f /tmp/mcp-kubernetes-sse.err   # stderr / errors
+tail -f /tmp/mcp-kubernetes-sse.log
 
-# Stop (stays installed, restarts on next login)
+# Restart (e.g. after kind cluster restart)
 launchctl stop com.local.mcp-kubernetes-sse
+launchctl start com.local.mcp-kubernetes-sse
 
 # Reload after editing the plist
 launchctl unload ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 launchctl load -w ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
-
-# Uninstall completely
-launchctl unload ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
-rm ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 ```
 
 ---
 
-## Local LLM Demo — Open WebUI via Bifrost
+## Postman Collection
 
-All local Ollama models are accessible through a single Bifrost gateway endpoint, with a real user-facing chat interface via [Open WebUI](https://github.com/open-webui/open-webui). Every message routes through Bifrost to Ollama running on the Mac host — nothing leaves the machine.
+`postman/bifrost-k8s-mcp.postman_collection.json` contains 40 requests across 5 folders with formatted visualizations in the Visualize tab.
 
-> Full step-by-step demo scenarios: [docs/bifrost-openwebui-demo-scenarios.md](docs/bifrost-openwebui-demo-scenarios.md)
+| Folder | Key | Purpose |
+|---|---|---|
+| 🔒 Restricted (Read-Only) | `RESTRICTED_KEY` | 7 read-only Kubernetes tools |
+| 🚫 Restricted — Access Denied | `RESTRICTED_KEY` | Intentional failures showing governance enforcement |
+| 🔑 Admin (Full Access) | `ADMIN_KEY` | Full Kubernetes operations — logs, exec, scale, delete |
+| 🔥 Prometheus — Metrics & Queries | `ADMIN_KEY` | 14 Prometheus queries via MCP |
+| 🔮 Bifrost — Gateway Metrics | `ADMIN_KEY` | 8 LLM usage metric queries |
 
-### Request Flow
+Set three collection variables before running: `BF` (`http://localhost:8080/mcp`), `ADMIN_KEY`, `RESTRICTED_KEY`.
 
+![Bifrost MCP Catalog showing both servers connected](docs/screenshots/bifrost-mcp-catalog.png)
+
+---
+
+## Traffic Simulation
+
+Generate synthetic traffic through Bifrost to populate Prometheus metrics:
+
+```bash
+bash scripts/bifrost-sim.sh        # 40 requests (default)
+bash scripts/bifrost-sim.sh 100    # custom count
 ```
-Browser
-  └── Open WebUI :3001
-        └── POST /v1/chat/completions
-              └── Bifrost :8080 (port-forward)
-                    └── Ollama :11434 (Mac host)
-                          └── openai/qwen2.5:7b (local model)
-```
 
-### Quick Start — Open WebUI
+Rotates across `llama3.2:3b` and `qwen2.5-coder:7b`. Wait ~30 seconds after completion for Prometheus to scrape, then run the 🔮 Bifrost folder in Postman.
+
+![Bifrost total requests showing 144 requests by provider and model](docs/screenshots/bifrost-total-requests.png)
+
+---
+
+## Open WebUI
+
+All local Ollama models are accessible through a real chat interface via [Open WebUI](https://github.com/open-webui/open-webui). Every message routes through Bifrost — nothing leaves the machine.
 
 ```bash
 docker run -d \
   --name open-webui \
   -p 3001:8080 \
   -e OPENAI_API_BASE_URL=http://host.docker.internal:8080/v1 \
-  -e OPENAI_API_KEY=$BIFROST_VIRTUAL_KEY \
+  -e OPENAI_API_KEY=$KEY_ALL \
   -v open-webui:/app/backend/data \
   --restart always \
   ghcr.io/open-webui/open-webui:main
 ```
 
-Open `http://localhost:3001` — port `3000` is reserved by Grafana in this environment.
+Open `http://localhost:3001`. Port `3000` is reserved by Grafana.
 
-> **Note:** Use `host.docker.internal` (not `localhost`) for `OPENAI_API_BASE_URL` — this resolves to the Mac host from inside the Docker container, routing traffic correctly through Bifrost.
-
----
-
-### Model Selection
-
-All models registered in Bifrost appear in the Open WebUI model dropdown, prefixed with `openai/` to indicate the provider type.
-
-![Open WebUI model selector showing available Ollama models](docs/screenshots/owui-model-selector.png)
-
----
-
-### Chat Interface
-
-Users interact with local Ollama models through a familiar chat interface. The model name is shown in the header — responses stream in real time via Bifrost.
-
-![Open WebUI chat with qwen2.5:7b response](docs/screenshots/owui-basic-chat.png)
-
----
-
-### Multi-Model Comparison
-
-Open WebUI supports running multiple models in parallel on the same prompt. Select two models using the **+** icon next to the model selector to compare quality and speed side by side.
-
-![Side by side comparison of qwen2.5:7b and llama3.2:3b](docs/screenshots/owui-model-comparison.png)
-
----
-
-### Audit Trail
-
-Every request through Bifrost is logged with provider, model, latency, and token counts. Open the Bifrost UI at `http://localhost:8080/logs` to see the full audit trail — including all requests from Open WebUI.
-
-![Bifrost logs showing requests from Open WebUI](docs/screenshots/bifrost-logs.png)
-
----
-
-### Access Control
-
-Virtual keys enforce model-level access control. Requests to unauthorised models are rejected at the gateway before reaching Ollama.
-
-![403 response from Bifrost for blocked model access](docs/screenshots/bifrost-access-control.png)
-
----
-
-## Key Configuration Facts
-
-| Item | Value |
-|---|---|
-| Bifrost UI | `http://localhost:8080` (via port-forward) |
-| MCP JSON-RPC endpoint | `POST http://localhost:8080/mcp` |
-| Completions endpoint | `POST http://localhost:8080/v1/chat/completions` |
-| Auth header | `X-Api-Key: $BIFROST_VIRTUAL_KEY` |
-| MCP tool name format | `kubernetes_local-<tool_name>` (underscore, then hyphen) |
-| Anthropic model | `anthropic/claude-sonnet-4-5-20250929` |
-| Ollama model prefix | `openai/<modelname>` e.g. `openai/qwen2.5:7b` |
-| Ollama provider type | `openai` (NOT `ollama`) |
-| Ollama base URL (k3d) | `http://192.168.1.21:11434` (no `/v1` suffix) |
-| Ollama base URL (kind) | `http://192.168.65.254:11434` (no `/v1` suffix) |
-| MCP SSE URL (in-cluster) | `http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse` |
-| MCP SSE URL (local) | `http://localhost:8811/sse` |
-| Open WebUI | `http://localhost:3001` |
-| Grafana | `http://localhost:3000` |
+> Use `host.docker.internal` (not `localhost`) — this resolves to the Mac host from inside Docker, routing traffic through Bifrost correctly.
 
 ---
 
 ## Virtual Key Model
 
-Virtual keys sit between callers and backend providers, controlling which models and tools each caller can access. The diagram below shows the relationship between callers, virtual keys, provider keys, and backends — and what gets blocked when a restricted key is used.
-
 ```mermaid
 flowchart LR
     subgraph callers ["Callers"]
-        CU["curl (all)"]
-        OW["Open WebUI"]
-        CR["curl (restricted)"]
+        CU["curl / Postman\n(admin key)"]
+        CR["curl / Postman\n(restricted key)"]
     end
 
     subgraph bifrost ["Bifrost :8080"]
-        subgraph vk1 ["ollama-local key"]
-            VK1A["All models allowed\nAll tools allowed"]
+        subgraph vk1 ["Admin key"]
+            VK1A["All 48 tools\nAll models"]
         end
-        subgraph vk2 ["demo-restricted key"]
-            VK2A["llama3.2:3b only\nRead tools only"]
+        subgraph vk2 ["Restricted key"]
+            VK2A["7 read-only k8s tools\nllama3.2:3b only"]
         end
-    end
-
-    subgraph providers ["Provider keys"]
-        PK1["anthropic-key"]
-        PK2["ollama-local"]
     end
 
     subgraph backends ["Backends"]
         AN["Anthropic"]
         OL["Ollama"]
+        KM["kubernetes-mcp"]
+        PM["prometheus-mcp"]
     end
 
     CU --> vk1
-    OW --> vk1
     CR --> vk2
 
-    vk1 --> PK1
-    vk1 --> PK2
-    vk2 -->|"llama3.2:3b only"| PK2
-
-    PK1 --> AN
-    PK2 --> OL
+    vk1 --> AN
+    vk1 --> OL
+    vk1 --> KM
+    vk1 --> PM
+    vk2 -->|"llama3.2:3b only"| OL
+    vk2 -->|"7 tools only"| KM
 
     vk2 -. "❌ qwen2.5:7b blocked" .-> BK["403 model not allowed"]
     vk2 -. "❌ pods_delete blocked" .-> BK2["tool not found"]
@@ -399,70 +363,100 @@ flowchart LR
     style VK2A fill:#85B7EB,stroke:#185FA5,color:#042C53
 ```
 
-> **Key point:** A restricted key is scoped at creation time. Bifrost enforces the scope on every request — the backend never sees blocked requests.
+![Access denied — restricted key blocked from pods_delete](docs/screenshots/access-denied-delete-pod.png)
 
+---
 
 ## After Restarting the kind Cluster
 
-The kind API server port changes on every cluster restart. Both the Launch Agent SSE server and Claude Desktop cache the kubeconfig at startup and must be restarted whenever kind is stopped and restarted.
+The kind API server port changes on every cluster restart. Restart the LaunchAgent to reload the kubeconfig:
 
 ```bash
-# 1. Restart the Launch Agent (reloads kubeconfig with new API port)
+# 1. Restart the LaunchAgent
 launchctl stop com.local.mcp-kubernetes-sse
 launchctl start com.local.mcp-kubernetes-sse
 
-# 2. Restart Claude Desktop (reloads its stdio MCP instance)
-osascript -e 'quit app "Claude"'
-sleep 3
-open -a Claude
-
-# 3. Re-apply port-forward
+# 2. Re-apply port-forwards
 kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090 &
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80 &
 
-# 4. Verify everything is healthy
-curl -s http://localhost:8080/api/mcp/clients | \
-  jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
+# 3. Verify
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $KEY_ALL" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | jq '[.result.tools[].name] | length'
+# Expected: 48
 ```
 
 ---
 
 ## Known Gotchas
 
-- **Restart Launch Agent + Claude Desktop after kind cluster restart** — the kind API server port changes on every restart. Both processes cache kubeconfig at startup and will fail with `RESOURCE_NOT_FOUND` errors until restarted. See section above.
-- **`pods_top` fails with `RESOURCE_NOT_FOUND`** — either Metrics Server is not installed (run `./scripts/install.sh --apply`) or the MCP server has a stale kubeconfig (restart the Launch Agent). A working curl test does not mean the Claude Desktop MCP instance is also working — they are separate processes.
-- **Use single-line curl for MCP calls** — zsh parse errors occur when pasting multi-line curl blocks with inline comments (`#`). Always use single-line format: `curl -s -X POST ... -d '{"jsonrpc":"2.0",...}'`
-- **Tool name format is `kubernetes_local-<tool>`** — underscore in the client name, hyphen as separator. Run `tools/list` to confirm exact names before calling.
-- **No `x-bf-mcp-include-clients` header needed** — tool names are prefixed so Bifrost routes automatically. The header is only needed if tools are unprefixed.
-- **`state: null` from curl** — the Bifrost port-forward is not running. Check with `lsof -i :8080`.
-- **k3d uses Mac LAN IP (`192.168.1.21`)** — kind cannot route to this address and uses the socat proxy instead.
-- **kind: never create manual EndpointSlices** — they conflict with the controller-managed slice and break kube-proxy. Remove with `kubectl delete endpointslice mcp-kubernetes-sse -n ai-gateway`.
-- **`ENABLE_UNSAFE_SSE_TRANSPORT=1` is required** — use the `--port` flag only when starting the MCP server, not `--transport`.
-- **Claude Desktop runs its own stdio instance** — separate from the SSE Launch Agent. Do not modify `claude_desktop_config.json` for the SSE server.
-- **Open WebUI on port `3001`** — port `3000` is used by Grafana. Always use `host.docker.internal` (not `localhost`) for `OPENAI_API_BASE_URL` inside the container.
-- **Helm install failures** — if Kyverno label enforcement or the encryption key secret causes the install to fail, check the pre-flight steps in `./scripts/install.sh` and re-run with `--apply`.
-- **Ollama provider registration** — use provider type `openai`, not `ollama`. Do not add `/v1` to the base URL — Bifrost appends it automatically.
-- **Agent mode** — `tools_to_auto_execute` is configured on the MCP client in the Bifrost UI, not passed as a request header.
+| Issue | Fix |
+|---|---|
+| Tool not found | Use `new_kubernetes_local-` prefix — not `kubernetes_local-`. Run `tools/list` to confirm exact names |
+| `state: null` from curl | Port-forward not running — `kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &` |
+| Restart LaunchAgent after kind restart | kind API server port changes on restart — `launchctl stop/start com.local.mcp-kubernetes-sse` |
+| `pods_top` fails with `RESOURCE_NOT_FOUND` | Metrics Server not installed, or LaunchAgent has stale kubeconfig — restart the LaunchAgent |
+| prometheus tools return 0 in tools/list | Server disconnected or virtual key missing access — reconnect in Bifrost UI; grant key access |
+| prometheus-mcp CrashLoopBackOff | Child process exited — shell loop missing from deployment args. See Prometheus MCP guide |
+| Ollama `403 Model is not allowed` | Allowed Keys empty in virtual key config — select provider key explicitly in Bifrost UI |
+| Ollama `404 page not found` | Wrong provider type (`ollama` instead of `openai`) or `/v1` in base URL — remove it |
+| `qwen2.5-coder:1.5b-base` returns 400 | Base model — no chat completions support. Use `qwen2.5-coder:7b` instead |
+| Open WebUI shows no models | `OPENAI_API_BASE_URL` must point at Bifrost (`:8080`), not Ollama (`:11434`) |
+| Anthropic `429 rate_limit_error` | Tool schemas consume large token budget — use `claude-haiku-4-5-20251001` for MCP tool flows |
+| Agent mode not executing tools | Set **Tools to Auto Execute: `*`** in Bifrost UI → MCP → `new_kubernetes_local` → Edit |
+
+---
+
+## Key Configuration Reference
+
+| Item | Value |
+|---|---|
+| Bifrost UI | `http://localhost:8080` |
+| Bifrost completions | `POST http://localhost:8080/v1/chat/completions` |
+| Bifrost MCP endpoint | `POST http://localhost:8080/mcp` |
+| Auth header | `X-Api-Key: $KEY_ALL` |
+| Kubernetes MCP tool prefix | `new_kubernetes_local-<tool>` |
+| Prometheus MCP tool prefix | `prometheus-<tool>` |
+| Ollama model prefix | `openai/<modelname>` e.g. `openai/qwen2.5:7b` |
+| Ollama provider type | `openai` (NOT `ollama`) |
+| Ollama base URL (kind) | `http://192.168.1.21:11434` (no `/v1` suffix) |
+| Kubernetes MCP SSE URL | `http://192.168.1.21:8811/sse` |
+| Prometheus MCP URL | `http://prometheus-mcp.monitoring.svc.cluster.local:8080/mcp` |
+| Prometheus UI | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` |
+| ArgoCD | `http://localhost:9080` |
+| Open WebUI | `http://localhost:3001` |
+| x-bf-mcp-include-clients | `new_kubernetes_local` (agentic mode header) |
 
 ---
 
 ## Validated Environment
 
-| Component | Version |
+| Component | Version / Detail |
 |---|---|
-| Bifrost | v1.4.24 prerelease (chart 2.1.13) |
-| kubernetes-mcp-server | latest (Red Hat/containers) |
-| k3d cluster | k3d-demo, k3s v1.33.x |
+| Bifrost | v1.5.0-prerelease7 |
+| kubernetes-mcp-server | latest (macOS LaunchAgent, port 8811) |
+| prometheus-mcp-server | v0.18.0 (tjhop/prometheus-mcp-server) |
 | kind cluster | kind-devops-lab, k8s v1.33.x |
-| Docker Desktop | Mac (kind host gateway: 192.168.65.254) |
-| Ollama models | qwen2.5:7b, qwen3-coder:30b, llama3.2:3b, qwen2.5-coder:7b, qwen2.5-coder:1.5b-base, gemma4:latest |
-| Anthropic | claude-sonnet-4-5-20250929 |
+| Docker Desktop | Mac (LAN IP: 192.168.1.21) |
+| Ollama models | qwen2.5:7b, qwen3-coder:30b, llama3.2:3b, qwen2.5-coder:7b, gemma4:latest |
+| Anthropic models | claude-haiku-4-5-20251001, claude-sonnet-4-5-20250929 |
 | Open WebUI | latest (ghcr.io/open-webui/open-webui:main) |
+| kube-prometheus-stack | latest (Helm) |
 
 ---
 
 ## Docs
 
-- [Demo Guide](docs/demo-guide.md)
-- [Open WebUI Demo Scenarios](docs/bifrost-openwebui-demo-scenarios.md)
-- [AI Gateway Comparison](docs/gateway-comparison.md)
-- [Bifrost In-Depth Analysis](docs/bifrost-analysis.md)
+| Doc | Purpose |
+|---|---|
+| [docs/demo-guide.md](docs/demo-guide.md) | Primary demo playbook — 11 demos |
+| [docs/Prometheus MCP Server — Deployment & Demo Guide.md](docs/Prometheus%20MCP%20Server%20—%20Deployment%20%26%20Demo%20Guide.md) | Prometheus MCP setup, ServiceMonitor, Postman collection |
+| [docs/ollama-bifrost-setup.md](docs/ollama-bifrost-setup.md) | Ollama config, model management, Claude Desktop integration |
+| [docs/bifrost-analysis.md](docs/bifrost-analysis.md) | Bifrost vendor analysis, test scenarios |
+| [docs/gateway-comparison.md](docs/gateway-comparison.md) | Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone |
+| [docs/Additional-MCP-Server-Guides/](docs/Additional-MCP-Server-Guides/) | Setup guides for ArgoCD, AWS, Azure, Datadog, Dynatrace, GitHub, Grafana MCP servers |

@@ -1,7 +1,7 @@
 # Bifrost AI Gateway — In-Depth Analysis
 
 > **Audience:** Kubernetes / Platform Architect
-> **Date:** April 2026
+> **Date:** April 2026 (updated May 2026)
 > **Vendor:** Maxim AI (H3 Labs Inc.)
 > **Repo:** [github.com/maximhq/bifrost](https://github.com/maximhq/bifrost) — Apache 2.0
 > **Stack:** Go binary, single static executable, OpenAI-compatible API surface
@@ -17,7 +17,7 @@
 5. [Pros](#pros)
 6. [Cons](#cons)
 7. [Costs](#costs)
-8. [k3d Test Environment Setup](#k3d-test-environment-setup)
+8. [kind Test Environment Setup](#kind-test-environment-setup)
 9. [Test Scenarios](#test-scenarios)
 10. [Verdict](#verdict)
 
@@ -107,7 +107,7 @@ Headline benchmark: **11 µs mean overhead at 5,000 RPS** (sustained load, loggi
 
 > **Note:** Benchmarks are vendor-published. Independent validation recommended before using as a procurement argument.
 
-For AI workloads specifically — low RPS but high latency due to streaming tokens — Kong and NGINX-based gateways carry unnecessary overhead. Bifrost’s architecture is optimised for streaming, semantic caching, and agentic tool chaining where latency compounds across multiple LLM calls.
+For AI workloads specifically — low RPS but high latency due to streaming tokens — Kong and NGINX-based gateways carry unnecessary overhead. Bifrost's architecture is optimised for streaming, semantic caching, and agentic tool chaining where latency compounds across multiple LLM calls.
 
 -----
 
@@ -170,7 +170,7 @@ Governance primitives, semantic caching, OTel/Prometheus, virtual keys, fallback
 HA via gossip-protocol, automatic service discovery, and zero-downtime rolling deployments are documented and Helm-native.
 
 **5. Single binary, minimal footprint.**
-No dependency graph. Fits naturally into a constrained k3d environment without fighting resource limits. 120 MB RAM under load.
+No dependency graph. Fits naturally into a constrained kind environment without fighting resource limits. 120 MB RAM under load.
 
 **6. Drop-in SDK compatibility.**
 `base_url` swap only — no application code changes, no SDK replacement.
@@ -179,7 +179,7 @@ No dependency graph. Fits naturally into a constrained k3d environment without f
 Rather than a separate MCP proxy, Bifrost handles both LLM routing and MCP tool governance in one process. Single point of auth, access control, and audit for both.
 
 **8. Mocker plugin.**
-Critical for k3d test environments — mock provider responses without live API credentials or egress. Full round-trip testing at zero cost.
+Critical for local test environments — mock provider responses without live API credentials or egress. Full round-trip testing at zero cost.
 
 -----
 
@@ -189,7 +189,7 @@ Critical for k3d test environments — mock provider responses without live API 
 No published tiers. Custom pricing requires a vendor conversation. Problematic for procurement cycles that need pre-engagement budget estimates.
 
 **2. Cluster mode is enterprise-gated.**
-HA clustering is not in OSS. For production multi-replica deployments with state synchronisation, you’re on enterprise or self-managing PostgreSQL-backed consistency.
+HA clustering is not in OSS. For production multi-replica deployments with state synchronisation, you're on enterprise or self-managing PostgreSQL-backed consistency.
 
 **3. Guardrails are enterprise-only.**
 Content safety / output filtering is enterprise-gated. For regulated environments this is a hard requirement, not optional.
@@ -225,14 +225,16 @@ No per-request fees, no token markups at any tier. The gateway adds zero cost to
 
 -----
 
-## k3d Test Environment Setup
+## kind Test Environment Setup
+
+> **Note:** This repo uses a kind cluster (`devops-lab`) rather than k3d. The manifests below apply to both — adjust `k3d cluster list` to `kind get clusters` and `k3d kubeconfig write` to `kind export kubeconfig` as needed.
 
 ### Prerequisites
 
 ```bash
 # Verify cluster
-k3d cluster list
-export KUBECONFIG=$(k3d kubeconfig write <your-cluster-name>)
+kind get clusters
+kubectl config use-context kind-devops-lab
 kubectl get nodes
 ```
 
@@ -275,7 +277,6 @@ stringData:
 > **Production variant:** Replace with PostgreSQL config — deploy `bitnami/postgresql` in the same namespace and update `config.json` accordingly:
 
 ```yaml
-# config.json snippet for PostgreSQL backend
 stringData:
   config.json: |
     {
@@ -354,7 +355,7 @@ spec:
         securityContext:
           runAsNonRoot: true
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false  # bifrost writes to /app/data
+          readOnlyRootFilesystem: false
         resources:
           requests:
             cpu: 250m
@@ -386,7 +387,7 @@ spec:
           failureThreshold: 3
       volumes:
       - name: data
-        emptyDir: {}        # ephemeral for local dev; replace with PVC for persistence
+        emptyDir: {}
       - name: config
         secret:
           secretName: bifrost-config
@@ -434,10 +435,10 @@ helm repo update
 helm install bifrost bifrost/bifrost \
   --namespace ai-gateway \
   --create-namespace \
-  --set persistence.enabled=false    # emptyDir for local dev
+  --set persistence.enabled=false
 ```
 
-### 6. ServiceMonitor (Prometheus / user workload monitoring)
+### 6. ServiceMonitor (kube-prometheus-stack)
 
 ```yaml
 # 03-bifrost-servicemonitor.yaml
@@ -445,36 +446,38 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: bifrost
-  namespace: ai-gateway
+  namespace: monitoring
   labels:
     app: bifrost
-    # Adjust to match your Prometheus operator serviceMonitorSelector labels
-    release: prometheus
+    release: kube-prometheus-stack   # must match Prometheus operator serviceMonitorSelector
 spec:
+  namespaceSelector:
+    matchNames:
+    - ai-gateway
   selector:
     matchLabels:
-      app: bifrost
+      app.kubernetes.io/name: bifrost
+      app.kubernetes.io/instance: bifrost
   endpoints:
   - port: http
     path: /metrics
     interval: 15s
     scrapeTimeout: 10s
-  namespaceSelector:
-    matchNames:
-    - ai-gateway
 ```
 
 ```bash
 kubectl apply -f 03-bifrost-servicemonitor.yaml
 ```
 
-Key metrics to validate in Prometheus/Thanos:
+Confirmed metrics in Bifrost v1.5:
 
-- `bifrost_requests_total`
-- `bifrost_request_duration_seconds`
-- `bifrost_provider_errors_total`
-- `bifrost_cache_hits_total`
-- `bifrost_cache_misses_total`
+- `bifrost_upstream_requests_total` — requests routed to upstream providers
+- `bifrost_success_requests_total` — successful upstream responses
+- `bifrost_input_tokens_total` — input tokens consumed
+- `bifrost_output_tokens_total` — output tokens generated
+- `bifrost_upstream_latency_seconds_bucket/count/sum` — upstream latency histogram
+
+All metrics include `provider`, `model`, and `key_name` labels.
 
 -----
 
@@ -488,7 +491,7 @@ Configure a Mock provider via the web UI (http://localhost:8080). Validates the 
 # Create a virtual key via UI first, then:
 curl -s -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "x-bifrost-key: <your-virtual-key>" \
+  -H "X-Api-Key: <your-virtual-key>" \
   -d '{
     "model": "mock/mock-model",
     "messages": [{"role": "user", "content": "test request"}]
@@ -504,17 +507,16 @@ Expected: structured response from the mock provider, request visible in the bui
 Configure two providers (e.g., OpenAI primary with an intentionally invalid key, Anthropic as fallback with a valid key). Proves the failover chain before any production dependency.
 
 ```bash
-# Fire a request — should fail over transparently to fallback provider
 curl -s -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "x-bifrost-key: <your-virtual-key>" \
+  -H "X-Api-Key: <your-virtual-key>" \
   -d '{
-    "model": "openai/gpt-4o-mini",
+    "model": "openai/llama3.2:3b",
     "messages": [{"role": "user", "content": "failover test"}]
-  }' | jq .
+  }' | jq '{provider: .extra_fields.provider, response: .choices[0].message.content}'
 
-# Check metrics for provider error counters
-curl -s http://localhost:8080/metrics | grep bifrost_provider_errors
+# Check upstream request counters
+curl -s http://localhost:8080/metrics | grep bifrost_upstream_requests_total
 ```
 
 -----
@@ -525,9 +527,6 @@ Create two virtual keys with different token budgets via the UI. Exhaust one key
 
 ```bash
 #!/usr/bin/env zsh
-# scenario-budget-enforcement.sh
-# Requires: BIFROST_KEY_LOW_BUDGET, BIFROST_KEY_HIGH_BUDGET env vars
-
 GATEWAY="http://localhost:8080"
 PAYLOAD='{"model":"mock/mock-model","messages":[{"role":"user","content":"budget test"}]}'
 
@@ -536,7 +535,7 @@ for i in {1..20}; do
   STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     -X POST "$GATEWAY/v1/chat/completions" \
     -H "Content-Type: application/json" \
-    -H "x-bifrost-key: $BIFROST_KEY_LOW_BUDGET" \
+    -H "X-Api-Key: $BIFROST_KEY_LOW_BUDGET" \
     -d "$PAYLOAD")
   echo "Request $i: HTTP $STATUS"
 done
@@ -545,7 +544,7 @@ echo ""
 echo "==> Testing high-budget key (should still work)..."
 curl -s -X POST "$GATEWAY/v1/chat/completions" \
   -H "Content-Type: application/json" \
-  -H "x-bifrost-key: $BIFROST_KEY_HIGH_BUDGET" \
+  -H "X-Api-Key: $BIFROST_KEY_HIGH_BUDGET" \
   -d "$PAYLOAD" | jq '.choices[0].message.content // .error'
 ```
 
@@ -556,7 +555,6 @@ curl -s -X POST "$GATEWAY/v1/chat/completions" \
 Deploy Qdrant in-cluster, configure Bifrost to use it as the vector store, then validate cache hits with semantically similar prompts.
 
 ```bash
-# Deploy Qdrant
 helm repo add qdrant https://qdrant.github.io/qdrant-helm
 helm repo update
 helm install qdrant qdrant/qdrant \
@@ -566,7 +564,7 @@ helm install qdrant qdrant/qdrant \
   --set resources.requests.cpu=100m
 ```
 
-Configure semantic caching in Bifrost UI:
+Configure in Bifrost UI:
 
 ```json
 {
@@ -584,15 +582,14 @@ Configure semantic caching in Bifrost UI:
 
 ```bash
 #!/usr/bin/env zsh
-# scenario-semantic-cache.sh
 GATEWAY="http://localhost:8080"
 KEY="$BIFROST_VIRTUAL_KEY"
 
 send() {
   curl -s -X POST "$GATEWAY/v1/chat/completions" \
     -H "Content-Type: application/json" \
-    -H "x-bifrost-key: $KEY" \
-    -d "{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"$1\"}]}" \
+    -H "X-Api-Key: $KEY" \
+    -d "{\"model\":\"openai/qwen2.5:7b\",\"messages\":[{\"role\":\"user\",\"content\":\"$1\"}]}" \
     -w "\nHTTP: %{http_code}, Time: %{time_total}s\n"
 }
 
@@ -602,10 +599,6 @@ send "What is the capital of France?"
 echo ""
 echo "==> Semantically similar request (cache hit expected):"
 send "Can you tell me France's capital city?"
-
-echo ""
-echo "==> Cache metrics:"
-curl -s http://localhost:8080/metrics | grep -E "bifrost_cache_(hits|misses)"
 ```
 
 -----
@@ -614,294 +607,182 @@ curl -s http://localhost:8080/metrics | grep -E "bifrost_cache_(hits|misses)"
 
 ```bash
 #!/usr/bin/env zsh
-# scenario-metrics-validation.sh
 GATEWAY="http://localhost:8080"
 
-echo "==> Scraping Prometheus metrics endpoint..."
+echo "==> Bifrost metrics:"
 curl -s "$GATEWAY/metrics" | grep "^bifrost_" | sort
 
 echo ""
-echo "==> Key metrics summary:"
+echo "==> Key metrics (v1.5 confirmed):"
 curl -s "$GATEWAY/metrics" | grep -E \
-  "bifrost_requests_total|bifrost_request_duration|bifrost_provider_errors|bifrost_cache_hits|bifrost_cache_misses"
+  "bifrost_upstream_requests_total|bifrost_success_requests_total|bifrost_input_tokens_total|bifrost_output_tokens_total|bifrost_upstream_latency"
 ```
 
-Validate in Thanos Querier (if user workload monitoring is active):
+Validate via Prometheus (port-forward to `localhost:9090`):
 
 ```promql
-# Request rate
-rate(bifrost_requests_total[5m])
+# Request rate by model
+rate(bifrost_upstream_requests_total[5m])
 
-# Error rate by provider
-rate(bifrost_provider_errors_total[5m])
+# Success rate
+rate(bifrost_success_requests_total[5m]) /
+  rate(bifrost_upstream_requests_total[5m])
 
-# Cache hit ratio
-rate(bifrost_cache_hits_total[5m]) /
-  (rate(bifrost_cache_hits_total[5m]) + rate(bifrost_cache_misses_total[5m]))
+# p99 upstream latency by model
+histogram_quantile(0.99,
+  sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model)
+)
 
-# P99 latency
-histogram_quantile(0.99, rate(bifrost_request_duration_seconds_bucket[5m]))
+# Token throughput
+sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m]))
+  by (provider, model)
 ```
+
+See [Prometheus MCP Server — Deployment & Demo Guide](Prometheus%20MCP%20Server%20—%20Deployment%20%26%20Demo%20Guide.md) for the full Prometheus integration setup including the ServiceMonitor, prometheus-mcp-server deployment, and Postman collection.
 
 -----
 
-### Scenario 6: MCP Gateway Integration — kubernetes-local Server
+### Scenario 6: MCP Gateway Integration — Kubernetes MCP Server
 
-Registers the `kubernetes-mcp-server` running on the Mac host as a Bifrost MCP client,
-routing all tool calls through Bifrost with virtual key governance. Validates live tool
-execution and destructive tool blocking from inside k3d.
+Registers the kubernetes MCP server running as a LaunchAgent on the Mac host as a
+Bifrost MCP server, routing all tool calls through Bifrost with virtual key governance.
 
 #### Architecture
 
 ```
-Bifrost Pod (ai-gateway)
-    │ JSON-RPC 2.0 over HTTP
+Bifrost Pod (ai-gateway namespace, kind cluster)
+    │ JSON-RPC 2.0
     ▼
-mcp-kubernetes-sse Service (ClusterIP 10.43.x.x:8811)
-    │ Endpoints: 192.168.1.21:8811
-    ▼
-kubernetes-mcp-server (SSE mode, Mac host)
+kubernetes-mcp-server (SSE, Mac host :8811)
     │ kubectl API calls
     ▼
-k3d-demo API server
+kind cluster API server
 ```
 
-#### Step 1 — Start the MCP server in SSE mode on your Mac
+The Mac's LAN IP (`192.168.1.21`) is directly reachable from kind pods via Docker Desktop
+network bridging — no proxy pod or Service+Endpoints manifest required.
 
-The correct package is `kubernetes-mcp-server` (Red Hat/containers project).
-The Flux159 `mcp-server-kubernetes` package only supports a single concurrent
-connection and crashes on a second — incompatible with Bifrost's persistent
-SSE connection.
+#### Step 1 — Start the MCP server as a LaunchAgent
+
+The server runs as a macOS LaunchAgent and starts automatically on login.
+The plist is at `scripts/com.local.mcp-kubernetes-sse.plist` in this repo.
 
 ```bash
-pkill -f "mcp-server-kubernetes" 2>/dev/null
-pkill -f "kubernetes-mcp-server" 2>/dev/null
+# Load the LaunchAgent
+launchctl load ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
 
-ENABLE_UNSAFE_SSE_TRANSPORT=1 \
-PORT=8811 \
-HOST=0.0.0.0 \
-npx -y kubernetes-mcp-server@latest &
-
-sleep 3 && curl -s --max-time 2 http://localhost:8811/sse; echo "exit:$?"
+# Verify it started
+launchctl list | grep mcp-kubernetes
+tail -20 /tmp/mcp-kubernetes-sse.log
 ```
 
-Expected: `event: endpoint` + `exit:28` (timeout = healthy open stream).
-
-> ⚠️ `host.k3d.internal` does NOT resolve from inside k3d pods — it is only
-> injected into node `/etc/hosts`, not pod DNS. Use the Mac's LAN IP instead
-> (see Step 2).
-
-#### Step 2 — Expose the host SSE server via in-cluster Service + Endpoints
-
-`192.168.1.21` is the Mac's LAN IP, confirmed reachable from inside k3d pods
-via the Docker Desktop LinuxKit VM network. The Docker bridge gateway
-(`172.19.0.1`) is NOT routable from pods.
-
-```yaml
-# mcp-kubernetes-host-svc.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: mcp-kubernetes-sse
-  namespace: ai-gateway
-spec:
-  type: ClusterIP
-  ports:
-  - port: 8811
-    targetPort: 8811
-    protocol: TCP
----
-apiVersion: v1
-kind: Endpoints
-metadata:
-  name: mcp-kubernetes-sse
-  namespace: ai-gateway
-subsets:
-- addresses:
-  - ip: 192.168.1.21      # Mac LAN IP — update if DHCP changes this
-  ports:
-  - port: 8811
-```
+The server listens on `0.0.0.0:8811`. Verify from the Mac:
 
 ```bash
-kubectl apply -f mcp-kubernetes-host-svc.yaml
-
-# Verify reachability from inside the Bifrost pod
-kubectl -n ai-gateway exec -it bifrost-0 -- \
-  sh -c 'wget -q --timeout=3 -O- \
-  http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse; echo exit:$?'
+curl -v --max-time 5 http://localhost:8811/sse
+# Expected: event: endpoint
+#           data: /sse?sessionId=<uuid>
 ```
 
-Expected: `event: endpoint` response.
+#### Step 2 — Verify reachability from inside the Bifrost pod
+
+```bash
+kubectl exec -n ai-gateway bifrost-0 -- \
+  wget -qO- http://192.168.1.21:8811/sse --timeout=3 2>&1 | head -3
+# Expected: event: endpoint
+```
 
 #### Step 3 — Register in Bifrost UI
 
-Navigate to **http://localhost:8080 → MCP → New MCP Server**.
+Navigate to **http://localhost:8080 → MCP Gateway → MCP Catalog → New MCP Server**:
 
 | Field | Value |
 |---|---|
-| **Name** | `kubernetes_local` (underscores only — hyphens are rejected) |
-| **Connection Type** | Server-Sent Events (SSE) |
-| **Connection URL** | `http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse` |
-| **Ping Available for Health Check** | On |
-| **Authentication Type** | None |
+| Name | `new_kubernetes_local` |
+| Connection Type | Server-Sent Events (SSE) |
+| Connection URL | `http://192.168.1.21:8811/sse` |
+| Authentication Type | None |
 
-> The URL must be the in-cluster ClusterIP DNS name — Bifrost resolves it from
-> inside the pod, not from the Mac. Registering with `host.k3d.internal` or
-> `192.168.1.21` directly will fail silently and register zero tools.
+> The previous entry `kubernetes_local` was disconnected due to an incorrect SSE URL
+> and could not be edited in the Bifrost UI — a new entry `new_kubernetes_local` was
+> created. All tool names carry the `new_kubernetes_local-` prefix accordingly.
 
-#### Step 4 — Verify server state and tool registration
-
-```bash
-curl -s http://localhost:8080/api/mcp/clients | jq '{state: .clients[0].state, tool_count: (.clients[0].tools | length)}'
-```
-
-Expected: `"state": "connected"`, `"tool_count": 19`.
-
-#### Step 5 — Scope the virtual key allow-list
-
-In Bifrost UI → **Keys → your key → Edit → MCP Tools**, set the allow-list
-to read-only tools only:
-
-```
-kubernetes_local-configuration_view
-kubernetes_local-namespaces_list
-kubernetes_local-events_list
-kubernetes_local-nodes_top
-kubernetes_local-nodes_stats_summary
-kubernetes_local-pods_get
-kubernetes_local-pods_list
-kubernetes_local-pods_list_in_namespace
-kubernetes_local-pods_log
-kubernetes_local-pods_top
-kubernetes_local-resources_get
-kubernetes_local-resources_list
-```
-
-Exclude destructive tools: `pods_delete`, `pods_exec`, `pods_run`,
-`resources_create_or_update`, `resources_delete`, `resources_scale`.
-
-#### Step 6 — Validate allowed tool call
-
-Tool names are prefixed with the server name: `kubernetes_local-<toolname>`.
-The Bifrost MCP API uses JSON-RPC 2.0 over `POST /mcp`, not REST.
-Auth header is `X-Api-Key`, not `x-bifrost-key`.
+After saving, verify 20 tools are registered:
 
 ```bash
 curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
-  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -H "X-Api-Key: <your-admin-key>" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | jq '[.result.tools[].name | select(startswith("new_kubernetes_local"))] | length'
+# Expected: 20
+```
+
+#### Step 4 — Scope the virtual key allow-list
+
+In Bifrost UI → **Keys → your key → Edit → MCP Tools**.
+
+Restricted key (read-only, 7 tools):
+
+```
+new_kubernetes_local-events_list
+new_kubernetes_local-namespaces_list
+new_kubernetes_local-pods_get
+new_kubernetes_local-pods_list
+new_kubernetes_local-pods_list_in_namespace
+new_kubernetes_local-resources_get
+new_kubernetes_local-resources_list
+```
+
+Admin key has access to all 20 tools including destructive operations
+(`pods_delete`, `pods_exec`, `resources_scale`, `resources_create_or_update`, `resources_delete`).
+
+#### Step 5 — Validate allowed tool call
+
+```bash
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: <your-admin-key>" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
     "method": "tools/call",
     "params": {
-      "name": "kubernetes_local-pods_list_in_namespace",
-      "arguments": {
-        "namespace": "ai-gateway"
-      }
+      "name": "new_kubernetes_local-pods_list_in_namespace",
+      "arguments": {"namespace": "ai-gateway"}
     }
-  }' | jq '.result.content[0].text'
+  }' | jq -r '.result.content[0].text'
+# Expected: live pod list including bifrost-0
 ```
 
-Expected: live pod list including `bifrost-0`.
-
-#### Step 7 — Validate governance block
+#### Step 6 — Validate governance block (restricted key)
 
 ```bash
 curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
-  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
+  -H "X-Api-Key: <your-restricted-key>" \
   -d '{
     "jsonrpc": "2.0",
     "id": 2,
     "method": "tools/call",
     "params": {
-      "name": "kubernetes_local-pods_delete",
-      "arguments": {
-        "name": "bifrost-0",
-        "namespace": "ai-gateway"
-      }
+      "name": "new_kubernetes_local-pods_delete",
+      "arguments": {"name": "bifrost-0", "namespace": "ai-gateway"}
     }
   }' | jq '.error'
-```
-
-Expected:
-
-```json
-{
-  "code": -32602,
-  "message": "tool 'kubernetes_local-pods_delete' not found: tool not found"
-}
+# Expected: {"code": -32602, "message": "tool 'new_kubernetes_local-pods_delete' not found: tool not found"}
 ```
 
 The call is rejected at Bifrost — the MCP server is never contacted.
 
-#### Step 8 — List registered tools via JSON-RPC
-
-```bash
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $BIFROST_VIRTUAL_KEY" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/list"}' \
-  | jq '[.result.tools[].name]'
-```
-
-#### Keeping the SSE server alive across reboots
-
-Add a launchd plist to auto-start the SSE server on login:
-
-```xml
-<!-- ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist -->
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.local.mcp-kubernetes-sse</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/local/bin/node</string>
-    <string>/Users/simonjday/.npm/_npx/kubernetes-mcp-server/dist/index.js</string>
-  </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>ENABLE_UNSAFE_SSE_TRANSPORT</key>
-    <string>1</string>
-    <key>PORT</key>
-    <string>8811</string>
-    <key>HOST</key>
-    <string>0.0.0.0</string>
-  </dict>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>/tmp/mcp-kubernetes-sse.log</string>
-  <key>StandardErrorPath</key>
-  <string>/tmp/mcp-kubernetes-sse.err</string>
-</dict>
-</plist>
-```
-
-```bash
-launchctl load ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
-launchctl list | grep mcp-kubernetes
-```
-
-#### Gotchas summary
+#### Troubleshooting
 
 | Issue | Root cause | Fix |
 |---|---|---|
-| `host.k3d.internal` NXDOMAIN from pod | Only injected into node `/etc/hosts`, not pod DNS | Use in-cluster Service + Endpoints pointing at Mac LAN IP |
-| `172.19.0.1` connection refused | Docker bridge gateway not routable from pods in Docker Desktop/LinuxKit | Use Mac LAN IP (`192.168.1.21`) confirmed from k3s TLS SAN |
-| `mcp-server-kubernetes` crashes on second connection | Flux159 package — single-session SSE limitation in SDK | Switch to `kubernetes-mcp-server` (Red Hat/containers project) |
-| Server name rejects hyphens | Bifrost UI validation: letters, numbers, underscores only | Use `kubernetes_local` not `kubernetes-local` |
-| `x-bifrost-key` header returns empty tools | Wrong auth header for MCP endpoint | Use `X-Api-Key` for `/mcp` endpoint |
-| Tools list returns `[]` via jq | jq filter corrupted by terminal URL-linking `.[result.tools]` | Use `.result.tools[].name` or pipe raw output first |
-| Registering with `192.168.1.21` directly | Bifrost resolves URL from inside pod — works, but brittle if IP changes | Use ClusterIP DNS via Service + Endpoints |
+| SSE disconnected in Bifrost UI | LaunchAgent restarted | Check `launchctl list \| grep mcp` and `tail /tmp/mcp-kubernetes-sse.log` |
+| Tool not found | Wrong prefix used | All tools use `new_kubernetes_local-` prefix |
+| `192.168.1.21` unreachable from pod | Mac LAN IP changed (DHCP) | Run `ipconfig getifaddr en0` and update Bifrost server URL |
+| `x-bf-mcp-include-clients` not routing | Wrong client name | Use `new_kubernetes_local` (the Bifrost server name) |
 
 -----
 
@@ -920,21 +801,17 @@ NS="ai-gateway"
 if $DRY_RUN; then
   echo "[DRY-RUN] helm uninstall bifrost --namespace $NS"
   echo "[DRY-RUN] kubectl -n $NS delete secret bifrost-encryption-key"
-  echo "[DRY-RUN] kubectl -n $NS delete servicemonitor bifrost"
-  echo "[DRY-RUN] kubectl -n $NS delete svc mcp-kubernetes-sse"
-  echo "[DRY-RUN] kubectl -n $NS delete endpoints mcp-kubernetes-sse"
+  echo "[DRY-RUN] kubectl -n monitoring delete servicemonitor bifrost"
   echo "[DRY-RUN] kubectl delete namespace $NS"
-  echo "[DRY-RUN] pkill -f kubernetes-mcp-server"
+  echo "[DRY-RUN] launchctl unload ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist"
   echo ""
   echo "Re-run with --apply to execute."
 else
   helm uninstall bifrost --namespace $NS
   kubectl -n $NS delete secret bifrost-encryption-key --ignore-not-found=true
-  kubectl -n $NS delete servicemonitor bifrost --ignore-not-found=true
-  kubectl -n $NS delete svc mcp-kubernetes-sse --ignore-not-found=true
-  kubectl -n $NS delete endpoints mcp-kubernetes-sse --ignore-not-found=true
+  kubectl -n monitoring delete servicemonitor bifrost --ignore-not-found=true
   kubectl delete namespace $NS --ignore-not-found=true
-  pkill -f "kubernetes-mcp-server" 2>/dev/null
+  launchctl unload ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist 2>/dev/null
 fi
 ```
 
@@ -958,10 +835,10 @@ Materially faster, better Go-native k8s fit, lower memory footprint. Younger pro
 
 Far simpler to operate — no Lua expertise, no NGINX-level resource overhead, no separate database required for basic operation. Bifrost wins on simplicity and AI-specific feature depth. Kong wins if you already have Kong in the stack and need general API management + AI in one platform.
 
-### k3d Development Loop
+### kind/k3d Development Loop
 
-The Mocker plugin + k3d combination is a clean, zero-cost dev loop. The full routing/governance/observability stack can be exercised without live API spend or external egress — the right approach for evaluating before any enterprise commercial conversation.
+The Mocker plugin + kind combination is a clean, zero-cost dev loop. The full routing/governance/observability stack can be exercised without live API spend or external egress — the right approach for evaluating before any enterprise commercial conversation.
 
 -----
 
-*Review compiled April 2026. Benchmark figures are vendor-published — independent validation recommended before use in procurement decisions.*
+*Review compiled April 2026, updated May 2026. Benchmark figures are vendor-published — independent validation recommended before use in procurement decisions.*
