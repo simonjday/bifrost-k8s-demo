@@ -137,7 +137,7 @@ In the Bifrost UI, go to **MCP Server Catalog → New MCP Server**:
 | Connection Type | Server-Sent Events (SSE) |
 | URL | `http://192.168.1.21:8811/sse` |
 
-![Bifrost MCP Catalog showing new_kubernetes_local (20/20 tools) and prometheus (28/28 tools) both connected](docs/screenshots/bifrost-mcp-catalog.png)
+![Bifrost MCP Catalog showing new_kubernetes_local (20/20 tools) and prometheus (28/28 tools) both connected](screenshots/bifrost-mcp-catalog.png)
 
 ---
 
@@ -250,7 +250,7 @@ In the Bifrost UI, go to **MCP Server Catalog → New MCP Server**:
 
 > **Important:** After creating the server, go to **Virtual Keys** in Bifrost and explicitly grant the prometheus MCP server access to each key that should use it. Without this step the tools register globally but return no results for that key.
 
-![prometheus-mcp pod running stably in the monitoring namespace](docs/screenshots/prometheus-mcp-running.png)
+![prometheus-mcp pod running stably in the monitoring namespace](screenshots/prometheus-mcp-running.png)
 
 Verify 28 tools are registered:
 
@@ -370,9 +370,9 @@ new_kubernetes_local-resources_list
 
 The 🚫 folder calls `pods_delete`, `resources_scale`, and `pods_exec` with the restricted key. Each returns a permission denied error, which the visualizer renders as a red "Access Denied — As Expected" banner — useful for demonstrating that the gateway enforces tool-level access control.
 
-![Access Denied visualizer — restricted key blocked from calling pods_delete](docs/screenshots/access-denied-delete-pod.png)
+![Access Denied visualizer — restricted key blocked from calling pods_delete](screenshots/access-denied-delete-pod.png)
 
-![Pods in namespace — list view using the restricted read-only key](docs/screenshots/pods-in-namespace-restricted.png)
+![Pods in namespace — list view using the restricted read-only key](screenshots/pods-in-namespace-restricted.png)
 
 ### Kubernetes Queries
 
@@ -385,7 +385,7 @@ The admin folder covers the full range of Kubernetes operations available throug
 - Scale deployments
 - List ArgoCD applications with health and sync status
 
-![Pod logs — line numbered viewer with error/warn/info colour coding](docs/screenshots/pod-logs-visualizer.png)
+![Pod logs — line numbered viewer with error/warn/info colour coding](screenshots/pod-logs-visualizer.png)
 
 ### Prometheus Queries
 
@@ -417,9 +417,9 @@ sum(rate(container_cpu_usage_seconds_total{container!=''}[5m])) by (namespace, p
 sum(container_memory_working_set_bytes{container!=''}) by (namespace, pod)
 ```
 
-![CPU usage by pod — sorted by highest consumer, queried via Prometheus MCP](docs/screenshots/cpu-usage-by-pod.png)
+![CPU usage by pod — sorted by highest consumer, queried via Prometheus MCP](screenshots/cpu-usage-by-pod.png)
 
-![Instant query — up: 24 targets UP, 0 DOWN including bifrost and bifrost-headless](docs/screenshots/instant-query-up-targets.png)
+![Instant query — up: 24 targets UP, 0 DOWN including bifrost and bifrost-headless](screenshots/instant-query-up-targets.png)
 
 ### Bifrost Gateway Metrics
 
@@ -439,9 +439,9 @@ sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m])
   by (provider, model)
 ```
 
-![Bifrost total requests — 144 requests broken down by provider and model](docs/screenshots/bifrost-total-requests.png)
+![Bifrost total requests — 144 requests broken down by provider and model](screenshots/bifrost-total-requests.png)
 
-![Bifrost upstream latency p99 — per provider and model](docs/screenshots/bifrost-latency-p99.png)
+![Bifrost upstream latency p99 — per provider and model](screenshots/bifrost-latency-p99.png)
 
 ---
 
@@ -454,13 +454,13 @@ Before examining the Prometheus integration, it is worth noting that Bifrost inc
 
 The Bifrost dashboard provides real-time charts for request volume, token usage, model usage breakdown, cost, latency percentiles (P90/P95/P99), and cache hit rate — all scoped to configurable time windows.
 
-![Bifrost dashboard showing request volume, token usage, model rankings and latency percentiles](docs/screenshots/bifrost-dashboard.png)
+![Bifrost dashboard showing request volume, token usage, model rankings and latency percentiles](screenshots/bifrost-dashboard.png)
 
 ### LLM Logs
 
 Individual requests are logged with full detail — provider, model, prompt preview, latency, and token count — making it straightforward to audit specific calls.
 
-![Bifrost LLM logs showing live request stream with provider, model, latency and token counts](docs/screenshots/bifrost-llm-logs.png)
+![Bifrost LLM logs showing live request stream with provider, model, latency and token counts](screenshots/bifrost-llm-logs.png)
 
 ### Why Add Prometheus
 
