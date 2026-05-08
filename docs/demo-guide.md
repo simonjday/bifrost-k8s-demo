@@ -68,7 +68,32 @@ curl -s -X POST http://localhost:8080/mcp \
 # Expected: new_kubernetes_local: 20, prometheus: 28
 ```
 
-### 4. Quick end-to-end check
+
+### 5. Open WebUI pre-flight (if using for demos)
+
+```bash
+# Check container is running
+docker ps | grep open-webui
+
+# Verify env vars are correct
+docker inspect open-webui | jq '.[0].Config.Env | map(select(startswith("OPENAI")))'
+# Expected: OPENAI_API_BASE_URL=http://host.docker.internal:8080/v1
+
+# Quick sanity check
+curl -s http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $KEY_ALL" \
+  -d '{"model":"openai/llama3.2:3b","messages":[{"role":"user","content":"ping"}],"max_tokens":5}' \
+  | jq '.choices[0].message.content'
+```
+
+If Open WebUI shows no models in the dropdown:
+- Check `OPENAI_API_BASE_URL` points to `http://host.docker.internal:8080/v1` not `http://localhost:11434`
+- Restart if needed: `docker restart open-webui`
+
+If Bifrost logs are not showing Open WebUI requests — the requests are going directly to Ollama. The `OPENAI_API_BASE_URL` must point at Bifrost (`:8080`), not Ollama (`:11434`).
+
+### 5. Quick end-to-end check
 
 ```bash
 export KEY_ALL="<your-admin-key>"
