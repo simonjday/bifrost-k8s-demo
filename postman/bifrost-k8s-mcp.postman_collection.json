@@ -1,0 +1,2574 @@
+{
+  "info": {
+    "name": "Bifrost \u2014 Kubernetes MCP Demo",
+    "description": "Two-key demo: Restricted (read-only, 7 tools) vs Admin (full access). Switch keys via collection variables.",
+    "_postman_id": "bifrost-k8s-mcp-v3",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BF",
+      "value": "http://localhost:8080/mcp",
+      "type": "string"
+    },
+    {
+      "key": "ADMIN_KEY",
+      "value": "sk-bf-0b7391e8-12b3-45f7-bf83-69f6f8910115",
+      "type": "string"
+    },
+    {
+      "key": "RESTRICTED_KEY",
+      "value": "sk-bf-78daabea-6191-4b2c-afd9-7bef84b066ea",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "\ud83d\udd12 Restricted (Read-Only) \u2014 7 tools",
+      "description": "Uses RESTRICTED_KEY. Safe for demos \u2014 list and get operations only, no mutations.",
+      "item": [
+        {
+          "name": "List all namespaces",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:7px 12px;border-bottom:1px solid #1e293b}tr:hover td{background:#1e293b55}.Active{color:#4ade80;font-weight:600}.Terminating{color:#f87171;font-weight:600}.err{color:#f87171}`;",
+                  "try {",
+                  "  const text = pm.response.json().result.content[0].text;",
+                  "  let data; try { data=JSON.parse(text); } catch(_){ data=null; }",
+                  "  let rows='';",
+                  "  if(data&&data.items){ rows=data.items.map(n=>{ const s=n.status&&n.status.phase?n.status.phase:'Active'; return `<tr><td>${n.metadata.name}</td><td class='${s}'>${s}</td><td>${n.metadata.creationTimestamp||''}</td></tr>`; }).join(''); }",
+                  "  else{ const lines=text.trim().split('\\n').filter(l=>l&&!l.startsWith('NAME')); rows=lines.map(l=>{const p=l.trim().split(/\\s+/);return `<tr><td>${p[0]||''}</td><td class='Active'>${p[1]||''}</td><td>${p[2]||''}</td></tr>`;}).join(''); }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Namespaces</h2><p class='sub'>\ud83d\udd12 Restricted Key</p><table><thead><tr><th>Name</th><th>Status</th><th>Age / Created</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-namespaces_list\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List all pods (all namespaces)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155;position:sticky;top:0}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.Running{color:#4ade80}.Pending{color:#fbbf24}.Failed,.Error{color:#f87171}.Succeeded,.Completed{color:#94a3b8}.err{color:#f87171}`;",
+                  "const sc=s=>s?s.replace(/\\s/g,''):'';",
+                  "try {",
+                  "  const text=pm.response.json().result.content[0].text;",
+                  "  let data; try{data=JSON.parse(text);}catch(_){data=null;}",
+                  "  let rows='';",
+                  "  if(data&&data.items){ rows=data.items.map(p=>{ const s=p.status&&p.status.phase?p.status.phase:'Unknown'; const cs=p.status&&p.status.containerStatuses||[]; const ready=cs.length?cs.filter(c=>c.ready).length+'/'+cs.length:'-'; const restarts=cs.reduce((a,c)=>a+c.restartCount,0); return `<tr><td>${p.metadata.namespace}</td><td>${p.metadata.name}</td><td class='${sc(s)}'>${s}</td><td>${ready}</td><td>${restarts}</td><td>${p.metadata.creationTimestamp||''}</td></tr>`; }).join(''); }",
+                  "  else{ const lines=text.trim().split('\\n').filter(l=>l&&!l.startsWith('NAMESPACE')&&!l.startsWith('NAME')); rows=lines.map(l=>{const p=l.trim().split(/\\s+/);const s=p[3]||p[2]||'';return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td class='${sc(s)}'>${s}</td><td>${p[4]||p[3]||''}</td><td>${p[5]||p[4]||''}</td><td>${p[6]||p[5]||''}</td></tr>`;}).join(''); }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>All Pods</h2><p class='sub'>\ud83d\udd12 Restricted Key</p><table><thead><tr><th>Namespace</th><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>Created</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_list\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List pods in namespace",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.Running{color:#4ade80}.Pending{color:#fbbf24}.Failed,.Error{color:#f87171}.Succeeded,.Completed{color:#94a3b8}.err{color:#f87171}`;",
+                  "const sc=s=>s?s.replace(/\\s/g,''):'';",
+                  "try {",
+                  "  const text=pm.response.json().result.content[0].text;",
+                  "  let data; try{data=JSON.parse(text);}catch(_){data=null;}",
+                  "  let rows='';",
+                  "  if(data&&data.items){ rows=data.items.map(p=>{ const s=p.status&&p.status.phase?p.status.phase:'Unknown'; const cs=p.status&&p.status.containerStatuses||[]; const ready=cs.length?cs.filter(c=>c.ready).length+'/'+cs.length:'-'; const restarts=cs.reduce((a,c)=>a+c.restartCount,0); const node=p.spec&&p.spec.nodeName?p.spec.nodeName:'-'; return `<tr><td>${p.metadata.name}</td><td class='${sc(s)}'>${s}</td><td>${ready}</td><td>${restarts}</td><td>${node}</td><td>${p.metadata.creationTimestamp||''}</td></tr>`; }).join(''); }",
+                  "  else{ const lines=text.trim().split('\\n').filter(l=>l&&!l.startsWith('NAME')); rows=lines.map(l=>{const p=l.trim().split(/\\s+/);const s=p[2]||'';return `<tr><td>${p[0]||''}</td><td class='${sc(s)}'>${s}</td><td>${p[1]||''}</td><td>${p[3]||''}</td><td>-</td><td>${p[4]||''}</td></tr>`;}).join(''); }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Pods in Namespace</h2><p class='sub'>\ud83d\udd12 Restricted Key</p><table><thead><tr><th>Name</th><th>Status</th><th>Ready</th><th>Restarts</th><th>Node</th><th>Created</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_list_in_namespace\",\n    \"arguments\": {\n      \"namespace\": \"goose-test\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get single pod",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}h3{color:#94a3b8;font-size:12px;text-transform:uppercase;margin:16px 0 6px}table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.Running{color:#4ade80}.Pending{color:#fbbf24}.Failed{color:#f87171}.label{display:inline-block;background:#1e40af33;color:#93c5fd;border:1px solid #1d4ed8;border-radius:4px;padding:1px 6px;font-size:11px;margin:2px}.err{color:#f87171}`;",
+                  "try {",
+                  "  const text=pm.response.json().result.content[0].text;",
+                  "  let p; try{p=JSON.parse(text);}catch(_){p=null;}",
+                  "  if(p&&p.metadata){",
+                  "    const s=p.status&&p.status.phase?p.status.phase:'Unknown';",
+                  "    const labels=p.metadata.labels?Object.entries(p.metadata.labels).map(([k,v])=>`<span class='label'>${k}=${v}</span>`).join(' '):'-';",
+                  "    const containers=p.spec&&p.spec.containers?p.spec.containers.map(c=>{ const cs=p.status&&p.status.containerStatuses?p.status.containerStatuses.find(x=>x.name===c.name):null; return `<tr><td>${c.name}</td><td>${c.image}</td><td>${cs?(cs.ready?'\u2713':'\u2717'):'-'}</td><td>${cs?cs.restartCount:'-'}</td></tr>`; }).join(''):'<tr><td colspan=4>-</td></tr>';",
+                  "    const info=[['Name',p.metadata.name],['Namespace',p.metadata.namespace],['Status',`<span class='${s}'>${s}</span>`],['Node',(p.spec&&p.spec.nodeName)||'-'],['IP',(p.status&&p.status.podIP)||'-'],['Created',p.metadata.creationTimestamp||'-'],['Labels',labels]].map(([k,v])=>`<tr><th style='width:130px'>${k}</th><td>${v}</td></tr>`).join('');",
+                  "    pm.visualizer.set(`<style>${styles}</style><h2>Pod Detail</h2><p class='sub'>\ud83d\udd12 Restricted Key</p><table><tbody>${info}</tbody></table><h3>Containers</h3><table><thead><tr><th>Name</th><th>Image</th><th>Ready</th><th>Restarts</th></tr></thead><tbody>${containers}</tbody></table>`);",
+                  "  } else { pm.visualizer.set(`<style>${styles}</style><pre style='background:#1e293b;padding:16px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap'>${text}</pre>`); }",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_get\",\n    \"arguments\": {\n      \"name\": \"bad-app-86f6899b84-nbmdw\",\n      \"namespace\": \"goose-test\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List events in namespace",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b}tr:hover td{background:#1e293b55}.Normal{color:#4ade80}.Warning{color:#fbbf24;font-weight:600}.err{color:#f87171}`;",
+                  "try {",
+                  "  const text=pm.response.json().result.content[0].text;",
+                  "  let data; try{data=JSON.parse(text);}catch(_){data=null;}",
+                  "  let rows='';",
+                  "  if(data&&data.items){ rows=data.items.map(e=>{ const type=e.type||'Normal'; return `<tr><td class='${type}'>${type}</td><td>${e.involvedObject?e.involvedObject.name:''}</td><td>${e.reason||''}</td><td style='max-width:400px'>${e.message||''}</td><td>${e.count||1}</td><td>${e.lastTimestamp||e.eventTime||''}</td></tr>`; }).join(''); }",
+                  "  else{ const lines=text.trim().split('\\n').filter(l=>l&&!l.startsWith('LAST')&&!l.startsWith('TYPE')); rows=lines.map(l=>{const p=l.trim().split(/\\s{2,}/);return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td>${p[2]||''}</td><td>${p[3]||''}</td><td>${p[4]||''}</td><td>${p[5]||''}</td></tr>`;}).join(''); }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Events</h2><p class='sub'>\ud83d\udd12 Restricted Key</p><table><thead><tr><th>Type</th><th>Object</th><th>Reason</th><th>Message</th><th>Count</th><th>Last Seen</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-events_list\",\n    \"arguments\": {\n      \"namespace\": \"goose-test\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List resources \u2014 ArgoCD Applications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.Healthy{color:#4ade80}.Degraded{color:#f87171}.Progressing{color:#fbbf24}.Synced{color:#4ade80}.OutOfSync{color:#fb923c}.err{color:#f87171}`;",
+                  "try {",
+                  "  const text=pm.response.json().result.content[0].text;",
+                  "  let data; try{data=JSON.parse(text);}catch(_){data=null;}",
+                  "  let rows='';",
+                  "  if(data&&data.items){ rows=data.items.map(a=>{ const health=a.status&&a.status.health?a.status.health.status:'-'; const sync=a.status&&a.status.sync?a.status.sync.status:'-'; const dest=a.spec&&a.spec.destination?`${a.spec.destination.server||''} / ${a.spec.destination.namespace||''}`:'-'; return `<tr><td>${a.metadata.name}</td><td>${a.metadata.namespace}</td><td class='${health}'>${health}</td><td class='${sync.replace(' ','')}'>${sync}</td><td>${dest}</td></tr>`; }).join(''); }",
+                  "  else{ const lines=text.trim().split('\\n').filter(l=>l&&!l.startsWith('NAME')); rows=lines.map(l=>{const p=l.trim().split(/\\s{2,}/);return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td>${p[2]||''}</td><td>${p[3]||''}</td><td>${p[4]||''}</td></tr>`;}).join(''); }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>ArgoCD Applications</h2><p class='sub'>\ud83d\udd12 Restricted Key</p><table><thead><tr><th>Name</th><th>Namespace</th><th>Health</th><th>Sync</th><th>Destination</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-resources_list\",\n    \"arguments\": {\n      \"apiVersion\": \"argoproj.io/v1alpha1\",\n      \"kind\": \"Application\",\n      \"namespace\": \"argocd\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List resources \u2014 Deployments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.ok{color:#4ade80}.warn{color:#fbbf24}.err{color:#f87171}`;",
+                  "try {",
+                  "  const text=pm.response.json().result.content[0].text;",
+                  "  let data; try{data=JSON.parse(text);}catch(_){data=null;}",
+                  "  let rows='';",
+                  "  if(data&&data.items){ rows=data.items.map(d=>{ const desired=d.spec.replicas||0; const ready=d.status&&d.status.readyReplicas?d.status.readyReplicas:0; const cls=ready===desired?'ok':ready===0?'err':'warn'; const images=d.spec.template.spec.containers.map(c=>c.image).join(', '); return `<tr><td>${d.metadata.name}</td><td>${d.metadata.namespace}</td><td class='${cls}'>${ready}/${desired}</td><td>${d.status&&d.status.updatedReplicas||0}</td><td style='max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${images}</td><td>${d.metadata.creationTimestamp||''}</td></tr>`; }).join(''); }",
+                  "  else{ const lines=text.trim().split('\\n').filter(l=>l&&!l.startsWith('NAME')); rows=lines.map(l=>{const p=l.trim().split(/\\s{2,}/);return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td>${p[2]||''}</td><td>${p[3]||''}</td><td>${p[4]||''}</td><td>${p[5]||''}</td></tr>`;}).join(''); }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Deployments</h2><p class='sub'>\ud83d\udd12 Restricted Key</p><table><thead><tr><th>Name</th><th>Namespace</th><th>Ready</th><th>Updated</th><th>Images</th><th>Created</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-resources_list\",\n    \"arguments\": {\n      \"apiVersion\": \"apps/v1\",\n      \"kind\": \"Deployment\",\n      \"namespace\": \"default\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get single resource \u2014 ArgoCD Application",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155;width:140px}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}.Healthy{color:#4ade80}.Degraded{color:#f87171}.Synced{color:#4ade80}.OutOfSync{color:#fb923c}.err{color:#f87171}`;",
+                  "try {",
+                  "  const text=pm.response.json().result.content[0].text;",
+                  "  let r; try{r=JSON.parse(text);}catch(_){r=null;}",
+                  "  if(r&&r.metadata){",
+                  "    const health=r.status&&r.status.health?r.status.health.status:'-';",
+                  "    const sync=r.status&&r.status.sync?r.status.sync.status:'-';",
+                  "    const info=[['Name',r.metadata.name],['Namespace',r.metadata.namespace],['Health',`<span class='${health}'>${health}</span>`],['Sync',`<span class='${sync.replace(' ','')}'>${sync}</span>`],['Repo',r.spec&&r.spec.source?r.spec.source.repoURL:'-'],['Path',r.spec&&r.spec.source?r.spec.source.path:'-'],['Target Rev',r.spec&&r.spec.source?r.spec.source.targetRevision:'-'],['Destination',r.spec&&r.spec.destination?`${r.spec.destination.server} / ${r.spec.destination.namespace}`:'-'],['Created',r.metadata.creationTimestamp||'-']].map(([k,v])=>`<tr><th>${k}</th><td>${v}</td></tr>`).join('');",
+                  "    pm.visualizer.set(`<style>${styles}</style><h2>ArgoCD Application</h2><p class='sub'>\ud83d\udd12 Restricted Key</p><table><tbody>${info}</tbody></table>`);",
+                  "  } else { pm.visualizer.set(`<style>${styles}</style><pre style='background:#1e293b;padding:16px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap'>${text}</pre>`); }",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-resources_get\",\n    \"arguments\": {\n      \"apiVersion\": \"argoproj.io/v1alpha1\",\n      \"kind\": \"Application\",\n      \"name\": \"podinfo\",\n      \"namespace\": \"argocd\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "\ud83d\udeab Restricted \u2014 Access Denied Examples",
+      "description": "These requests intentionally use the RESTRICTED_KEY to call admin-only tools. Expected to fail \u2014 demonstrates permission enforcement.",
+      "item": [
+        {
+          "name": "\u274c Delete pod (should be denied)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}.banner{background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px}.icon{font-size:28px;line-height:1}.title{font-size:16px;font-weight:700;color:#fca5a5;margin:0 0 4px}.subtitle{font-size:12px;color:#fca5a5;opacity:.8;margin:0}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:7px 12px;border-bottom:1px solid #1e293b;font-family:monospace}.val{color:#fca5a5}`;",
+                  "try {",
+                  "  const body = pm.response.json();",
+                  "  const isError = body.error || (body.result && body.result.isError);",
+                  "  const msg = body.error ? body.error.message : (body.result && body.result.content ? body.result.content[0].text : JSON.stringify(body));",
+                  "  const rows = [",
+                  "    ['Tool requested', 'new_kubernetes_local-pods_delete'],",
+                  "    ['Key used', '{{RESTRICTED_KEY}}'],",
+                  "    ['Expected outcome', 'Access Denied'],",
+                  "    ['Actual response', msg]",
+                  "  ].map(([k,v])=>`<tr><th style='width:160px'>${k}</th><td class='val'>${v}</td></tr>`).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><div class='banner'><div class='icon'>\ud83d\udeab</div><div><p class='title'>Access Denied \u2014 As Expected</p><p class='subtitle'>The restricted key cannot call pods_delete</p></div></div><table><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<p style='color:#f87171'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_delete\",\n    \"arguments\": {\n      \"name\": \"bad-app-86f6899b84-nbmdw\",\n      \"namespace\": \"goose-test\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "\u274c Scale deployment (should be denied)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}.banner{background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px}.icon{font-size:28px;line-height:1}.title{font-size:16px;font-weight:700;color:#fca5a5;margin:0 0 4px}.subtitle{font-size:12px;color:#fca5a5;opacity:.8;margin:0}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:7px 12px;border-bottom:1px solid #1e293b;font-family:monospace}.val{color:#fca5a5}`;",
+                  "try {",
+                  "  const body = pm.response.json();",
+                  "  const msg = body.error ? body.error.message : (body.result && body.result.content ? body.result.content[0].text : JSON.stringify(body));",
+                  "  const rows = [",
+                  "    ['Tool requested', 'new_kubernetes_local-resources_scale'],",
+                  "    ['Key used', '{{RESTRICTED_KEY}}'],",
+                  "    ['Expected outcome', 'Access Denied'],",
+                  "    ['Actual response', msg]",
+                  "  ].map(([k,v])=>`<tr><th style='width:160px'>${k}</th><td class='val'>${v}</td></tr>`).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><div class='banner'><div class='icon'>\ud83d\udeab</div><div><p class='title'>Access Denied \u2014 As Expected</p><p class='subtitle'>The restricted key cannot call resources_scale</p></div></div><table><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<p style='color:#f87171'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-resources_scale\",\n    \"arguments\": {\n      \"apiVersion\": \"apps/v1\",\n      \"kind\": \"Deployment\",\n      \"name\": \"my-deployment\",\n      \"namespace\": \"default\",\n      \"replicas\": 0\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "\u274c Exec into pod (should be denied)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}.banner{background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px}.icon{font-size:28px;line-height:1}.title{font-size:16px;font-weight:700;color:#fca5a5;margin:0 0 4px}.subtitle{font-size:12px;color:#fca5a5;opacity:.8;margin:0}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:7px 12px;border-bottom:1px solid #1e293b;font-family:monospace}.val{color:#fca5a5}`;",
+                  "try {",
+                  "  const body = pm.response.json();",
+                  "  const msg = body.error ? body.error.message : (body.result && body.result.content ? body.result.content[0].text : JSON.stringify(body));",
+                  "  const rows = [",
+                  "    ['Tool requested', 'new_kubernetes_local-pods_exec'],",
+                  "    ['Key used', '{{RESTRICTED_KEY}}'],",
+                  "    ['Expected outcome', 'Access Denied'],",
+                  "    ['Actual response', msg]",
+                  "  ].map(([k,v])=>`<tr><th style='width:160px'>${k}</th><td class='val'>${v}</td></tr>`).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><div class='banner'><div class='icon'>\ud83d\udeab</div><div><p class='title'>Access Denied \u2014 As Expected</p><p class='subtitle'>The restricted key cannot call pods_exec</p></div></div><table><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<p style='color:#f87171'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{RESTRICTED_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_exec\",\n    \"arguments\": {\n      \"name\": \"bad-app-86f6899b84-nbmdw\",\n      \"namespace\": \"goose-test\",\n      \"command\": [\"sh\", \"-c\", \"echo hello\"]\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "\ud83d\udd11 Admin (Full Access) \u2014 All tools",
+      "description": "Uses ADMIN_KEY. Full access including mutations \u2014 exec, delete, scale, create, logs, top, config.",
+      "item": [
+        {
+          "name": "0 \u2014 Discovery",
+          "item": [
+            {
+              "name": "List all available tools",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:7px 12px;border-bottom:1px solid #1e293b;vertical-align:top}tr:hover td{background:#1e293b55}.badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#0ea5e933;color:#38bdf8}.err{color:#f87171}`;",
+                      "try {",
+                      "  const tools=pm.response.json().result.tools||[];",
+                      "  const rows=tools.map(t=>`<tr><td><span class='badge'>${t.name}</span></td><td>${t.description||''}</td></tr>`).join('');",
+                      "  pm.visualizer.set(`<style>${styles}</style><h2>Available Tools (${tools.length})</h2><p class='sub'>\ud83d\udd11 Admin Key</p><table><thead><tr><th>Tool Name</th><th>Description</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                      "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "1 \u2014 Configuration",
+          "item": [
+            {
+              "name": "View kubeconfig",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}pre{background:#1e293b;padding:16px;border-radius:8px;font-size:12px;overflow:auto;white-space:pre-wrap;color:#a5f3fc;border:1px solid #334155}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; pm.visualizer.set(`<style>${styles}</style><h2>Kubeconfig</h2><p class='sub'>\ud83d\udd11 Admin Key</p><pre>${text}</pre>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-configuration_view\",\n    \"arguments\": {}\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "List contexts",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:7px 12px;border-bottom:1px solid #1e293b}tr:hover td{background:#1e293b55}.active{color:#4ade80;font-weight:700}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; let data; try{data=JSON.parse(text);}catch(_){data=null;} let html; if(Array.isArray(data)){ const rows=data.map(c=>`<tr><td class='${c.current?'active':''}'>${c.current?'\u2605 ':''} ${c.name||c}</td><td>${c.cluster||''}</td><td>${c.user||''}</td><td>${c.namespace||'default'}</td></tr>`).join(''); html=`<table><thead><tr><th>Context</th><th>Cluster</th><th>User</th><th>Namespace</th></tr></thead><tbody>${rows}</tbody></table>`; } else { html=`<pre style='background:#1e293b;padding:16px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap'>${text}</pre>`; } pm.visualizer.set(`<style>${styles}</style><h2>Kubeconfig Contexts</h2><p class='sub'>\ud83d\udd11 Admin Key</p>${html}`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-configuration_contexts_list\",\n    \"arguments\": {}\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "2 \u2014 Pods",
+          "item": [
+            {
+              "name": "Get pod logs",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}.log-wrap{background:#0d1117;border:1px solid #334155;border-radius:8px;padding:12px;overflow:auto;max-height:600px}.line{display:flex;font-size:11px;font-family:monospace;line-height:1.6}.ln{color:#475569;min-width:40px;user-select:none;padding-right:12px;text-align:right}.txt{color:#e2e8f0;white-space:pre-wrap;word-break:break-all}.txt.error{color:#f87171}.txt.warn{color:#fbbf24}.txt.info{color:#a5f3fc}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; const lines=text.split('\\n'); const html=lines.map((l,i)=>{ const cls=/error|fatal|exception/i.test(l)?'error':/warn/i.test(l)?'warn':/info/i.test(l)?'info':''; return `<div class='line'><span class='ln'>${i+1}</span><span class='txt ${cls}'>${l.replace(/</g,'&lt;')}</span></div>`; }).join(''); pm.visualizer.set(`<style>${styles}</style><h2>Pod Logs (${lines.length} lines)</h2><p class='sub'>\ud83d\udd11 Admin Key</p><div class='log-wrap'>${html}</div>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_log\",\n    \"arguments\": {\n      \"name\": \"bad-app-86f6899b84-nbmdw\",\n      \"namespace\": \"goose-test\",\n      \"tail\": 50\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Pod resource usage (top)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; const lines=text.trim().split('\\n').filter(l=>l&&!l.startsWith('NAME')&&!l.startsWith('POD')); const rows=lines.map(l=>{const p=l.trim().split(/\\s+/);return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td>${p[2]||''}</td></tr>`;}).join(''); pm.visualizer.set(`<style>${styles}</style><h2>Pod Resource Usage</h2><p class='sub'>\ud83d\udd11 Admin Key</p><table><thead><tr><th>Pod</th><th>CPU</th><th>Memory</th></tr></thead><tbody>${rows}</tbody></table>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_top\",\n    \"arguments\": {\n      \"namespace\": \"goose-test\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Exec into pod",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}.log-wrap{background:#0d1117;border:1px solid #334155;border-radius:8px;padding:12px}.line{display:flex;font-size:11px;font-family:monospace;line-height:1.7}.ln{color:#475569;min-width:36px;padding-right:10px;text-align:right;user-select:none}.txt{color:#4ade80;white-space:pre-wrap}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; const lines=text.split('\\n'); const html=lines.map((l,i)=>`<div class='line'><span class='ln'>${i+1}</span><span class='txt'>${l.replace(/</g,'&lt;')}</span></div>`).join(''); pm.visualizer.set(`<style>${styles}</style><h2>Exec Output</h2><p class='sub'>\ud83d\udd11 Admin Key</p><div class='log-wrap'>${html}</div>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_exec\",\n    \"arguments\": {\n      \"name\": \"bad-app-86f6899b84-nbmdw\",\n      \"namespace\": \"goose-test\",\n      \"command\": [\"sh\", \"-c\", \"echo hello\"]\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Run pod",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}pre{background:#1e293b;padding:16px;border-radius:8px;font-size:12px;white-space:pre-wrap;color:#a5f3fc;border:1px solid #334155}.ok{color:#4ade80;font-weight:700}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; pm.visualizer.set(`<style>${styles}</style><h2>Run Pod</h2><p class='sub'>\ud83d\udd11 Admin Key</p><p class='ok'>\u2713 Command accepted</p><pre>${text}</pre>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_run\",\n    \"arguments\": {\n      \"name\": \"my-pod\",\n      \"namespace\": \"default\",\n      \"image\": \"nginx:latest\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete pod",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}pre{background:#1e293b;padding:16px;border-radius:8px;font-size:12px;white-space:pre-wrap;color:#fca5a5;border:1px solid #7f1d1d}.ok{color:#4ade80;font-weight:700}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; pm.visualizer.set(`<style>${styles}</style><h2>Delete Pod</h2><p class='sub'>\ud83d\udd11 Admin Key</p><p class='ok'>\u2713 Delete issued</p><pre>${text}</pre>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-pods_delete\",\n    \"arguments\": {\n      \"name\": \"bad-app-86f6899b84-nbmdw\",\n      \"namespace\": \"goose-test\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "3 \u2014 Nodes",
+          "item": [
+            {
+              "name": "Node resource usage (top)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:7px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; const lines=text.trim().split('\\n').filter(l=>l&&!l.startsWith('NAME')&&!l.startsWith('NODE')); const rows=lines.map(l=>{const p=l.trim().split(/\\s+/);return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td>${p[2]||''}</td><td>${p[3]||''}</td><td>${p[4]||''}</td></tr>`;}).join(''); pm.visualizer.set(`<style>${styles}</style><h2>Node Resource Usage</h2><p class='sub'>\ud83d\udd11 Admin Key</p><table><thead><tr><th>Node</th><th>CPU</th><th>CPU%</th><th>Memory</th><th>Memory%</th></tr></thead><tbody>${rows}</tbody></table>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-nodes_top\",\n    \"arguments\": {}\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Node stats summary",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}pre{background:#1e293b;padding:16px;border-radius:8px;font-size:12px;overflow:auto;white-space:pre-wrap;color:#a5f3fc;border:1px solid #334155}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; pm.visualizer.set(`<style>${styles}</style><h2>Node Stats Summary</h2><p class='sub'>\ud83d\udd11 Admin Key</p><pre>${text}</pre>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-nodes_stats_summary\",\n    \"arguments\": {\n      \"name\": \"my-node\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Node logs",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}.log-wrap{background:#0d1117;border:1px solid #334155;border-radius:8px;padding:12px;overflow:auto;max-height:600px}.line{display:flex;font-size:11px;font-family:monospace;line-height:1.6}.ln{color:#475569;min-width:40px;padding-right:12px;text-align:right;user-select:none}.txt{color:#e2e8f0;white-space:pre-wrap}.txt.error{color:#f87171}.txt.warn{color:#fbbf24}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; const lines=text.split('\\n'); const html=lines.map((l,i)=>{const cls=/error|fatal/i.test(l)?'error':/warn/i.test(l)?'warn':'';return `<div class='line'><span class='ln'>${i+1}</span><span class='txt ${cls}'>${l.replace(/</g,'&lt;')}</span></div>`;}).join(''); pm.visualizer.set(`<style>${styles}</style><h2>Node Logs</h2><p class='sub'>\ud83d\udd11 Admin Key</p><div class='log-wrap'>${html}</div>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-nodes_log\",\n    \"arguments\": {\n      \"name\": \"my-node\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4 \u2014 Resources",
+          "item": [
+            {
+              "name": "List resources \u2014 Services",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.ClusterIP{color:#a5f3fc}.NodePort{color:#fbbf24}.LoadBalancer{color:#4ade80}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; let data; try{data=JSON.parse(text);}catch(_){data=null;} let rows=''; if(data&&data.items){ rows=data.items.map(s=>{ const type=s.spec.type||'ClusterIP'; const ports=s.spec.ports?s.spec.ports.map(p=>`${p.port}${p.nodePort?':'+p.nodePort:''}/${p.protocol||'TCP'}`).join(', '):'-'; const extIP=s.status&&s.status.loadBalancer&&s.status.loadBalancer.ingress?s.status.loadBalancer.ingress.map(i=>i.ip||i.hostname).join(','):'-'; return `<tr><td>${s.metadata.name}</td><td>${s.metadata.namespace}</td><td class='${type}'>${type}</td><td>${s.spec.clusterIP||'-'}</td><td>${extIP}</td><td>${ports}</td></tr>`; }).join(''); } else { const lines=text.trim().split('\\n').filter(l=>l&&!l.startsWith('NAME')); rows=lines.map(l=>{const p=l.trim().split(/\\s{2,}/);return `<tr><td>${p[0]||''}</td><td>${p[1]||''}</td><td>${p[2]||''}</td><td>${p[3]||''}</td><td>${p[4]||''}</td><td>${p[5]||''}</td></tr>`;}).join(''); } pm.visualizer.set(`<style>${styles}</style><h2>Services</h2><p class='sub'>\ud83d\udd11 Admin Key</p><table><thead><tr><th>Name</th><th>Namespace</th><th>Type</th><th>Cluster IP</th><th>External IP</th><th>Ports</th></tr></thead><tbody>${rows}</tbody></table>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-resources_list\",\n    \"arguments\": {\n      \"apiVersion\": \"v1\",\n      \"kind\": \"Service\",\n      \"namespace\": \"default\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Create or update resource (YAML)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}pre{background:#1e293b;padding:16px;border-radius:8px;font-size:12px;white-space:pre-wrap;color:#a5f3fc;border:1px solid #334155}.ok{color:#4ade80;font-weight:700}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; pm.visualizer.set(`<style>${styles}</style><h2>Create / Update Resource</h2><p class='sub'>\ud83d\udd11 Admin Key</p><p class='ok'>\u2713 Applied</p><pre>${text}</pre>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-resources_create_or_update\",\n    \"arguments\": {\n      \"manifest\": \"apiVersion: v1\\nkind: ConfigMap\\nmetadata:\\n  name: my-config\\n  namespace: default\\ndata:\\n  key: value\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete resource",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}pre{background:#1e293b;padding:16px;border-radius:8px;font-size:12px;white-space:pre-wrap;color:#fca5a5;border:1px solid #7f1d1d}.ok{color:#4ade80;font-weight:700}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; pm.visualizer.set(`<style>${styles}</style><h2>Delete Resource</h2><p class='sub'>\ud83d\udd11 Admin Key</p><p class='ok'>\u2713 Deleted</p><pre>${text}</pre>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-resources_delete\",\n    \"arguments\": {\n      \"apiVersion\": \"v1\",\n      \"kind\": \"ConfigMap\",\n      \"name\": \"my-config\",\n      \"namespace\": \"default\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Scale resource",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#7dd3fc;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}pre{background:#1e293b;padding:16px;border-radius:8px;font-size:12px;white-space:pre-wrap;color:#a5f3fc;border:1px solid #334155}.ok{color:#4ade80;font-weight:700}.err{color:#f87171}`;",
+                      "try{ const text=pm.response.json().result.content[0].text; pm.visualizer.set(`<style>${styles}</style><h2>Scale Resource</h2><p class='sub'>\ud83d\udd11 Admin Key</p><p class='ok'>\u2713 Scaled</p><pre>${text}</pre>`); } catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "X-Api-Key",
+                    "value": "{{ADMIN_KEY}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BF}}",
+                  "host": [
+                    "{{BF}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"new_kubernetes_local-resources_scale\",\n    \"arguments\": {\n      \"apiVersion\": \"apps/v1\",\n      \"kind\": \"Deployment\",\n      \"name\": \"my-deployment\",\n      \"namespace\": \"default\",\n      \"replicas\": 2\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "\ud83d\udd25 Prometheus \u2014 Metrics & Queries",
+      "description": "Uses ADMIN_KEY. 28 tools via prometheus-mcp (supergateway SSE bridge) at prometheus-mcp.monitoring.svc.cluster.local:8080.",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const text=body.result&&body.result.content?body.result.content[0].text:JSON.stringify(body);",
+                  "  const ok=!body.error&&body.result&&!body.result.isError;",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Prometheus Health</h2><p class='sub'>\ud83d\udd25 Prometheus</p><p style='font-size:24px;margin:16px 0'>${ok?'\u2705 Healthy':'\u274c Unhealthy'}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:12px;white-space:pre-wrap'>${text}</pre>`);",
+                  "} catch(e){ pm.visualizer.set(`<p class='err'>${e.message}</p>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-healthy\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Build info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}td{color:#a5f3fc}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "  let data=null; try{ data=JSON.parse(text); }catch(_){}",
+                  "  let html='';",
+                  "  if(data&&typeof data==='object'){ const rows=Object.entries(data).map(([k,v])=>`<tr><th style='width:160px'>${k}</th><td>${typeof v==='object'?JSON.stringify(v):v}</td></tr>`).join(''); html=`<table><tbody>${rows}</tbody></table>`; }",
+                  "  else{ html=`<pre style='background:#1e293b;padding:16px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap'>${text}</pre>`; }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Prometheus Build Info</h2><p class='sub'>\ud83d\udd25 Prometheus</p>${html}`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-build_info\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Runtime info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}td{color:#a5f3fc}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "  let data=null; try{ data=JSON.parse(text); }catch(_){}",
+                  "  let html='';",
+                  "  if(data&&typeof data==='object'){ const rows=Object.entries(data).map(([k,v])=>`<tr><th style='width:200px'>${k}</th><td>${typeof v==='object'?JSON.stringify(v):v}</td></tr>`).join(''); html=`<table><tbody>${rows}</tbody></table>`; }",
+                  "  else{ html=`<pre style='background:#1e293b;padding:16px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap'>${text}</pre>`; }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Prometheus Runtime Info</h2><p class='sub'>\ud83d\udd25 Prometheus</p>${html}`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-runtime_info\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List scrape targets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}.up{color:#4ade80;font-weight:700}.down{color:#f87171;font-weight:700}.unknown{color:#fbbf24}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "  let targets=[];",
+                  "  try{ const d=JSON.parse(text); targets=(d&&d.activeTargets)?d.activeTargets:(Array.isArray(d)?d:[]); }catch(_){}",
+                  "  let rows='';",
+                  "  if(targets.length){",
+                  "    rows=targets.map(t=>{ const h=t.health||'unknown'; return `<tr><td>${t.labels&&t.labels.job||''}</td><td style='font-size:11px'>${t.scrapeUrl||''}</td><td class='${h}'>${h.toUpperCase()}</td><td>${t.lastScrape?new Date(t.lastScrape).toLocaleTimeString():''}</td><td style='color:#f87171;font-size:11px'>${t.lastError||'\u2014'}</td></tr>`; }).join('');",
+                  "  }",
+                  "  if(!rows&&text){ rows=`<tr><td colspan=5 style='padding:12px;white-space:pre-wrap;font-size:11px;color:#94a3b8'>${text.substring(0,800)}</td></tr>`; }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Scrape Targets (${targets.length||'?'})</h2><p class='sub'>\ud83d\udd25 Prometheus</p><table><thead><tr><th>Job</th><th>URL</th><th>Health</th><th>Last Scrape</th><th>Last Error</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-list_targets\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Active alerts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}.critical{color:#f87171;font-weight:700}.warning{color:#fbbf24;font-weight:600}.info{color:#60a5fa}.none{color:#4ade80}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "  let alerts=[];",
+                  "  try{ const d=JSON.parse(text); alerts=d&&d.alerts?d.alerts:(Array.isArray(d)?d:[]); }catch(_){}",
+                  "  let rows='';",
+                  "  if(alerts.length){",
+                  "    rows=alerts.map(a=>{ const sev=(a.labels&&a.labels.severity)||'info'; const name=(a.labels&&a.labels.alertname)||''; const ns=(a.labels&&a.labels.namespace)||''; return `<tr><td>${name}</td><td>${ns}</td><td class='${sev}'>${sev}</td><td>${a.state||''}</td><td style='font-size:11px'>${a.activeAt?new Date(a.activeAt).toLocaleString():''}</td></tr>`; }).join('');",
+                  "  }",
+                  "  if(!rows){",
+                  "    // Text fallback",
+                  "    if(text&&text.trim()&&!text.includes('[]')){ rows=`<tr><td colspan=5 style='padding:12px;white-space:pre-wrap;font-size:11px;color:#94a3b8'>${text.substring(0,500)}</td></tr>`; }",
+                  "    else{ rows=`<tr><td colspan=5 class='none' style='text-align:center;padding:20px'>\u2713 No active alerts</td></tr>`; }",
+                  "  }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Active Alerts</h2><p class='sub'>\ud83d\udd25 Prometheus</p><table><thead><tr><th>Alert</th><th>Namespace</th><th>Severity</th><th>State</th><th>Since</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-list_alerts\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List rules",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}.firing{color:#f87171;font-weight:700}.pending{color:#fbbf24}.inactive{color:#4ade80}.recording{color:#a78bfa}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "  let groups=[];",
+                  "  try{ const d=JSON.parse(text); groups=d&&d.groups?d.groups:(Array.isArray(d)?d:[]); }catch(_){}",
+                  "  let rows='';",
+                  "  if(groups.length){ groups.forEach(g=>{ (g.rules||[]).forEach(r=>{ const type=r.type||'alerting'; const state=r.state||'inactive'; rows+=`<tr><td>${g.name||''}</td><td>${r.name||''}</td><td class='${type==='recording'?'recording':state}'>${type==='recording'?'recording':state}</td><td style='font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>${r.query||r.expr||''}</td></tr>`; }); }); }",
+                  "  if(!rows&&text){ rows=`<tr><td colspan=4 style='padding:12px;white-space:pre-wrap;font-size:11px;color:#94a3b8'>${text.substring(0,800)}</td></tr>`; }",
+                  "  if(!rows){ rows=`<tr><td colspan=4 style='text-align:center;color:#94a3b8;padding:20px'>No rules found</td></tr>`; }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Rules</h2><p class='sub'>\ud83d\udd25 Prometheus</p><table><thead><tr><th>Group</th><th>Rule</th><th>State/Type</th><th>Query</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-list_rules\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Instant query \u2014 up (all targets)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.up{color:#4ade80;font-weight:700}.down{color:#f87171;font-weight:700}.badge{display:inline-block;background:#0ea5e933;color:#38bdf8;border-radius:4px;padding:1px 6px;font-size:11px;margin:1px}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const raw=body.result&&body.result.content?body.result.content[0].text:null;",
+                  "  if(!raw){ pm.visualizer.set(`<style>${styles}</style><p style='color:#f87171'>No content</p>`); return; }",
+                  "  // Parse the outer JSON wrapper if present",
+                  "  let text=raw;",
+                  "  try{ const outer=JSON.parse(raw); text=outer.result||raw; }catch(_){}",
+                  "  let rows=''; let total=0; let upCount=0;",
+                  "  // Try JSON array format first",
+                  "  try{",
+                  "    const data=JSON.parse(text);",
+                  "    const results=(data&&data.result)?data.result:(Array.isArray(data)?data:[]);",
+                  "    if(results.length){",
+                  "      total=results.length;",
+                  "      rows=results.map(r=>{ const val=r.value&&r.value[1]; const up=val==='1'; if(up)upCount++; const m=r.metric||{}; const job=m.job||''; const inst=m.instance||''; const labels=Object.entries(m).filter(([k])=>k!=='__name__'&&k!=='job'&&k!=='instance').map(([k,v])=>`<span class='badge'>${k}=${v}</span>`).join(' '); return `<tr><td class='${up?'up':'down'}'>${up?'\u25cf':'\u25cf'}</td><td>${job}</td><td>${inst}</td><td style='font-size:11px'>${labels}</td></tr>`; }).join('');",
+                  "    }",
+                  "  }catch(_){}",
+                  "  // Fallback: parse 'metric{labels} => value @[ts]' text format",
+                  "  if(!rows&&text){",
+                  "    const lines=text.trim().split('\\n').filter(Boolean);",
+                  "    total=lines.length;",
+                  "    rows=lines.map(l=>{",
+                  "      const val=l.includes('=> 1')?'1':'0';",
+                  "      const up=val==='1'; if(up)upCount++;",
+                  "      // Extract job= and instance= from label string",
+                  "      const jobMatch=l.match(/job=\\\\?\"([^\\\\\"]+)/); const instMatch=l.match(/instance=\\\\?\"([^\\\\\"]+)/);",
+                  "      const job=jobMatch?jobMatch[1]:'';",
+                  "      const inst=instMatch?instMatch[1]:'';",
+                  "      // Extract metric name",
+                  "      const nameMatch=l.match(/^([^{]+)/);",
+                  "      const name=nameMatch?nameMatch[1].trim():'';",
+                  "      return `<tr><td class='${up?'up':'down'}'>${up?'UP':'DOWN'}</td><td>${job}</td><td>${inst}</td><td style='font-size:11px;color:#64748b'>${name}</td></tr>`;",
+                  "    }).join('');",
+                  "  }",
+                  "  const summary=`<div style='display:flex;gap:16px;margin-bottom:12px'><div style='background:#14532d33;border:1px solid #16a34a;border-radius:6px;padding:8px 16px;text-align:center'><div style='color:#4ade80;font-size:20px;font-weight:700'>${upCount}</div><div style='color:#86efac;font-size:11px'>UP</div></div><div style='background:#7f1d1d33;border:1px solid #dc2626;border-radius:6px;padding:8px 16px;text-align:center'><div style='color:#f87171;font-size:20px;font-weight:700'>${total-upCount}</div><div style='color:#fca5a5;font-size:11px'>DOWN</div></div><div style='background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 16px;text-align:center'><div style='color:#e2e8f0;font-size:20px;font-weight:700'>${total}</div><div style='color:#94a3b8;font-size:11px'>TOTAL</div></div></div>`;",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Instant Query \u2014 up</h2><p class='sub'>\ud83d\udd25 Prometheus</p>${summary}<table><thead><tr><th>Status</th><th>Job</th><th>Instance</th><th>Metric / Labels</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p style='color:#f87171'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"up\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Instant query \u2014 CPU usage by pod",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.val{color:#fb923c;font-weight:600}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "\n  // Try JSON first, fall back to text format\n  let items=[];\n  try{\n    const d=JSON.parse(text);\n    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);\n  }catch(_){\n    // Parse 'metric{labels} => value @[ts]' text format\n    items=text.trim().split('\\n').filter(Boolean).map(l=>{\n      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);\n      const val=valMatch?valMatch[1]:'0';\n      const labels={};\n      const labelStr=l.match(/\\{([^}]*)\\}/);\n      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const [k,...v]=p.split('='); if(k) labels[k.trim()]=v.join('=').replace(/^\\\\?\"?|\\\\?\"?$/g,''); }); }\n      const nameMatch=l.match(/^([^{\\s]+)/);\n      if(nameMatch) labels['__name__']=nameMatch[1];\n      return {metric:labels, value:[null,val]};\n    });\n  }\n",
+                  "  let rows='';",
+                  "  if(items.length){",
+                  "    const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
+                  "    rows=sorted.map(r=>{ const v=parseFloat(r.value[1]); const m=r.metric||{}; return `<tr><td>${m.namespace||''}</td><td>${m.pod||m.instance||''}</td><td class='val'>${(v*100).toFixed(3)}%</td></tr>`; }).join('');",
+                  "  }",
+                  "  if(!rows) rows=`<tr><td colspan=3 style='text-align:center;color:#475569;padding:20px'>No data</td></tr>`;",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>CPU Usage by Pod</h2><p class='sub'>\ud83d\udd25 Prometheus</p><div class='query'>sum(rate(container_cpu_usage_seconds_total{container!=''}[5m])) by (namespace, pod)</div><table><thead><tr><th>Namespace</th><th>Pod</th><th>CPU %</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(rate(container_cpu_usage_seconds_total{container!=''}[5m])) by (namespace, pod)\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Instant query \u2014 Memory usage by pod",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.val{color:#a78bfa;font-weight:600}`;",
+                  "const fmt=b=>{ b=parseFloat(b); if(b>1073741824)return (b/1073741824).toFixed(2)+'GB'; if(b>1048576)return (b/1048576).toFixed(1)+'MB'; if(b>1024)return (b/1024).toFixed(0)+'KB'; return b+'B'; };",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "\n  // Try JSON first, fall back to text format\n  let items=[];\n  try{\n    const d=JSON.parse(text);\n    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);\n  }catch(_){\n    // Parse 'metric{labels} => value @[ts]' text format\n    items=text.trim().split('\\n').filter(Boolean).map(l=>{\n      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);\n      const val=valMatch?valMatch[1]:'0';\n      const labels={};\n      const labelStr=l.match(/\\{([^}]*)\\}/);\n      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const [k,...v]=p.split('='); if(k) labels[k.trim()]=v.join('=').replace(/^\\\\?\"?|\\\\?\"?$/g,''); }); }\n      const nameMatch=l.match(/^([^{\\s]+)/);\n      if(nameMatch) labels['__name__']=nameMatch[1];\n      return {metric:labels, value:[null,val]};\n    });\n  }\n",
+                  "  let rows='';",
+                  "  if(items.length){",
+                  "    const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
+                  "    rows=sorted.map(r=>{ const m=r.metric||{}; return `<tr><td>${m.namespace||''}</td><td>${m.pod||m.instance||''}</td><td class='val'>${fmt(r.value[1])}</td></tr>`; }).join('');",
+                  "  }",
+                  "  if(!rows) rows=`<tr><td colspan=3 style='text-align:center;color:#475569;padding:20px'>No data</td></tr>`;",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Memory Usage by Pod</h2><p class='sub'>\ud83d\udd25 Prometheus</p><div class='query'>sum(container_memory_working_set_bytes{container!=''}) by (namespace, pod)</div><table><thead><tr><th>Namespace</th><th>Pod</th><th>Memory</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(container_memory_working_set_bytes{container!=''}) by (namespace, pod)\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Range query \u2014 CPU rate last hour",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.val{color:#fb923c}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "  // Range query returns different text format",
+                  "  let items=[];",
+                  "  try{",
+                  "    const d=JSON.parse(text);",
+                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
+                  "  }catch(_){",
+                  "    // Text format for range queries: parse series blocks",
+                  "    const seriesBlocks=text.split('\\n\\n').filter(Boolean);",
+                  "    items=seriesBlocks.map(block=>{ const lines=block.trim().split('\\n'); const labels={}; const nameMatch=lines[0]&&lines[0].match(/^([^{\\s]+)/); if(nameMatch) labels['__name__']=nameMatch[1]; const labelStr=lines[0]&&lines[0].match(/\\{([^}]*)\\}/); if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const [k,...v]=p.split('='); if(k) labels[k.trim()]=v.join('=').replace(/^\\\\?\"?|\\\\?\"?$/g,''); }); } const values=lines.slice(1).map(l=>{ const m=l.match(/=> ([\\d.e+\\-]+) @/); return m?[null,m[1]]:null; }).filter(Boolean); return {metric:labels, values}; });",
+                  "  }",
+                  "  let rows='';",
+                  "  if(items.length){",
+                  "    rows=items.map(r=>{ const latest=r.values&&r.values[r.values.length-1]; const v=latest?parseFloat(latest[1]):0; const pts=r.values?r.values.length:0; const m=r.metric||{}; return `<tr><td>${m.namespace||''}</td><td>${m.pod||m.instance||''}</td><td class='val'>${(v*100).toFixed(4)}%</td><td>${pts} pts</td></tr>`; }).join('');",
+                  "  }",
+                  "  if(!rows) rows=`<tr><td colspan=4 style='text-align:center;color:#475569;padding:20px'>No data</td></tr>`;",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>CPU Rate \u2014 Last Hour</h2><p class='sub'>\ud83d\udd25 Prometheus range query</p><div class='query'>sum(rate(container_cpu_usage_seconds_total{container!=''}[5m])) by (namespace, pod)</div><table><thead><tr><th>Namespace</th><th>Pod</th><th>Latest CPU %</th><th>Data Points</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-range_query\",\n    \"arguments\": {\n      \"query\": \"sum(rate(container_cpu_usage_seconds_total{container!=''}[5m])) by (namespace, pod)\",\n      \"start_time\": \"1h\",\n      \"step\": \"5m\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Metric metadata \u2014 container_cpu_usage_seconds_total",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}.type{color:#fb923c;font-weight:600}`;",
+                  "try{",
+                  "  const text=pm.response.json().result.content[0].text;",
+                  "  let data; try{ data=JSON.parse(text); }catch(_){ data=null; }",
+                  "  let html='';",
+                  "  if(data&&typeof data==='object'){ const entries=Object.entries(data).flatMap(([metric,arr])=>arr.map(e=>({...e,metric}))); html=entries.map(e=>`<table style='margin-bottom:16px'><tbody><tr><th style='width:140px'>Metric</th><td>${e.metric}</td></tr><tr><th>Type</th><td class='type'>${e.type||''}</td></tr><tr><th>Help</th><td>${e.help||''}</td></tr><tr><th>Unit</th><td>${e.unit||'\u2014'}</td></tr></tbody></table>`).join(''); }",
+                  "  if(!html) html=`<pre style='background:#1e293b;padding:16px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap'>${text}</pre>`;",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Metric Metadata</h2><p class='sub'>\ud83d\udd25 Prometheus</p>${html}`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre>${pm.response.text()}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-metric_metadata\",\n    \"arguments\": {\n      \"metric\": \"container_cpu_usage_seconds_total\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "TSDB stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}td{color:#a5f3fc}.section{color:#7dd3fc;font-size:12px;text-transform:uppercase;margin:16px 0 6px;font-weight:600}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "  let data=null;",
+                  "  try{ data=JSON.parse(text); }catch(_){}",
+                  "  let html='';",
+                  "  if(data&&typeof data==='object'){",
+                  "    Object.entries(data).forEach(([section,val])=>{ html+=`<p class='section'>${section}</p>`; if(Array.isArray(val)){ html+=`<table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>${val.map(e=>`<tr><td>${e.name||e.labelName||''}</td><td>${e.value||e.seriesCount||''}</td></tr>`).join('')}</tbody></table>`; } else if(typeof val==='object'&&val){ html+=`<table><tbody>${Object.entries(val).map(([k,v])=>`<tr><th style='width:200px'>${k}</th><td>${v}</td></tr>`).join('')}</tbody></table>`; } else{ html+=`<p style='font-family:monospace;color:#a5f3fc'>${val}</p>`; } });",
+                  "  } else{ html=`<pre style='background:#1e293b;padding:16px;border-radius:8px;color:#a5f3fc;white-space:pre-wrap;font-size:11px'>${text.substring(0,2000)}</pre>`; }",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>TSDB Stats</h2><p class='sub'>\ud83d\udd25 Prometheus</p>${html}`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-tsdb_stats\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Label names",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}td{color:#fb923c}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "  let labels=[];",
+                  "  try{ const d=JSON.parse(text); labels=Array.isArray(d)?d:(d&&d.data?d.data:[]); }catch(_){ labels=text.trim().split('\\n').filter(Boolean); }",
+                  "  const rows=labels.map(l=>`<tr><td>${l}</td></tr>`).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Label Names (${labels.length})</h2><p class='sub'>\ud83d\udd25 Prometheus</p><input type='text' placeholder='Filter labels...' oninput='document.querySelectorAll(\"#t tbody tr\").forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(this.value.toLowerCase())?\"\":\"none\"})'><table id='t'><thead><tr><th>Label</th></tr></thead><tbody>${rows}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-label_names\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Prometheus config",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}.err{color:#f87171}pre{background:#1e293b;padding:16px;border-radius:8px;font-size:11px;overflow:auto;white-space:pre-wrap;color:#a5f3fc;border:1px solid #334155;max-height:600px}`;",
+                  "try{",
+                  "\n  const body=pm.response.json();\n  const raw=body.result&&body.result.content?body.result.content[0].text:'';\n  // Unwrap outer JSON if present (server wraps in {result:..., warnings:...})\n  let text=raw;\n  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}\n",
+                  "  let yaml=text;",
+                  "  try{ const d=JSON.parse(text); yaml=d&&d.yaml?d.yaml:text; }catch(_){}",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Prometheus Config</h2><p class='sub'>\ud83d\udd25 Prometheus</p><pre>${yaml.replace(/</g,'&lt;')}</pre>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-config\",\n    \"arguments\": {}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "\ud83d\udd2e Bifrost \u2014 Gateway Metrics",
+      "description": "Bifrost-specific metrics scraped from /metrics by Prometheus. Shows requests, tokens, latency and error rates per provider/model/key.",
+      "item": [
+        {
+          "name": "\ud83d\udcca Overview \u2014 all Bifrost metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
+                  "  let text=raw;",
+                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
+                  "  let items=[];",
+                  "  try{",
+                  "    const d=JSON.parse(text);",
+                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
+                  "  }catch(_){",
+                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
+                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
+                  "      const val=valMatch?valMatch[1]:'0';",
+                  "      const labels={};",
+                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
+                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
+                  "      return {metric:labels, value:[null,val]};",
+                  "    });",
+                  "  }",
+                  "  const rows=items.map(r=>{ const m=r.metric||{}; const name=m.__name__||''; const val=r.value[1]||''; const labels=Object.entries(m).filter(([k])=>k!=='__name__'&&k!=='job'&&k!=='instance').map(([k,v])=>`<span style='background:#1e293b;border:1px solid #334155;border-radius:3px;padding:1px 5px;font-size:10px;margin:1px;display:inline-block'>${k}=${v}</span>`).join(' '); return `<tr><td style='color:#a78bfa'>${name}</td><td>${parseFloat(val).toLocaleString()}</td><td style='font-size:11px'>${labels}</td></tr>`; }).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 All Metrics</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><input type='text' placeholder='Filter...' oninput='document.querySelectorAll(\"#t tbody tr\").forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(this.value.toLowerCase())?\"\":\"none\"})'><table id='t'><thead><tr><th>Metric</th><th>Value</th><th>Labels</th></tr></thead><tbody>${rows||'<tr><td colspan=3 style=\"text-align:center;color:#475569;padding:20px\">No data</td></tr>'}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"{job='bifrost'}\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "\ud83d\udd22 Total requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
+                  "  let text=raw;",
+                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
+                  "  let items=[];",
+                  "  try{",
+                  "    const d=JSON.parse(text);",
+                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
+                  "  }catch(_){",
+                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
+                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
+                  "      const val=valMatch?valMatch[1]:'0';",
+                  "      const labels={};",
+                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
+                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
+                  "      return {metric:labels, value:[null,val]};",
+                  "    });",
+                  "  }",
+                  "  const total=items.reduce((a,r)=>a+parseFloat(r.value[1]||0),0);",
+                  "  const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
+                  "  const rows=sorted.map(r=>{ const m=r.metric||{}; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td>${m.key_name||''}</td><td style='color:#a78bfa;font-weight:600'>${parseFloat(r.value[1]).toLocaleString()}</td></tr>`; }).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 Total Requests</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='stats'><div class='stat'><p class='stat-label'>Total Requests</p><p class='stat-value' style='color:#a78bfa'>${total.toLocaleString()}</p><p class='stat-sub'>all providers</p></div></div><div class='query'>sum(bifrost_upstream_requests_total) by (provider, model, key_name)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Requests</th></tr></thead><tbody>${rows||'<tr><td colspan=4 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(bifrost_upstream_requests_total) by (provider, model, key_name)\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "\u2705 Successful requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
+                  "  let text=raw;",
+                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
+                  "  let items=[];",
+                  "  try{",
+                  "    const d=JSON.parse(text);",
+                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
+                  "  }catch(_){",
+                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
+                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
+                  "      const val=valMatch?valMatch[1]:'0';",
+                  "      const labels={};",
+                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
+                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
+                  "      return {metric:labels, value:[null,val]};",
+                  "    });",
+                  "  }",
+                  "  const total=items.reduce((a,r)=>a+parseFloat(r.value[1]||0),0);",
+                  "  const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
+                  "  const rows=sorted.map(r=>{ const m=r.metric||{}; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td>${m.key_name||''}</td><td style='color:#4ade80;font-weight:600'>${parseFloat(r.value[1]).toLocaleString()}</td></tr>`; }).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 Successful Requests</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='stats'><div class='stat'><p class='stat-label'>Successful Requests</p><p class='stat-value' style='color:#4ade80'>${total.toLocaleString()}</p><p class='stat-sub'>all providers</p></div></div><div class='query'>sum(bifrost_success_requests_total) by (provider, model, key_name)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Successes</th></tr></thead><tbody>${rows||'<tr><td colspan=4 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(bifrost_success_requests_total) by (provider, model, key_name)\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "\ud83d\udce5 Input tokens total",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
+                  "  let text=raw;",
+                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
+                  "  let items=[];",
+                  "  try{",
+                  "    const d=JSON.parse(text);",
+                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
+                  "  }catch(_){",
+                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
+                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
+                  "      const val=valMatch?valMatch[1]:'0';",
+                  "      const labels={};",
+                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
+                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
+                  "      return {metric:labels, value:[null,val]};",
+                  "    });",
+                  "  }",
+                  "  const total=items.reduce((a,r)=>a+parseFloat(r.value[1]||0),0);",
+                  "  const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
+                  "  const rows=sorted.map(r=>{ const m=r.metric||{}; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td>${m.key_name||''}</td><td style='color:#a78bfa;font-weight:600'>${parseFloat(r.value[1]).toLocaleString()}</td></tr>`; }).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 Input Tokens</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='stats'><div class='stat'><p class='stat-label'>Total Input Tokens</p><p class='stat-value' style='color:#a78bfa'>${total.toLocaleString()}</p><p class='stat-sub'>all providers</p></div></div><div class='query'>sum(bifrost_input_tokens_total) by (provider, model, key_name)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Input Tokens</th></tr></thead><tbody>${rows||'<tr><td colspan=4 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(bifrost_input_tokens_total) by (provider, model, key_name)\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "\ud83d\udce4 Output tokens total",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
+                  "  let text=raw;",
+                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
+                  "  let items=[];",
+                  "  try{",
+                  "    const d=JSON.parse(text);",
+                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
+                  "  }catch(_){",
+                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
+                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
+                  "      const val=valMatch?valMatch[1]:'0';",
+                  "      const labels={};",
+                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
+                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
+                  "      return {metric:labels, value:[null,val]};",
+                  "    });",
+                  "  }",
+                  "  const total=items.reduce((a,r)=>a+parseFloat(r.value[1]||0),0);",
+                  "  const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
+                  "  const rows=sorted.map(r=>{ const m=r.metric||{}; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td>${m.key_name||''}</td><td style='color:#38bdf8;font-weight:600'>${parseFloat(r.value[1]).toLocaleString()}</td></tr>`; }).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 Output Tokens</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='stats'><div class='stat'><p class='stat-label'>Total Output Tokens</p><p class='stat-value' style='color:#38bdf8'>${total.toLocaleString()}</p><p class='stat-sub'>all providers</p></div></div><div class='query'>sum(bifrost_output_tokens_total) by (provider, model, key_name)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Output Tokens</th></tr></thead><tbody>${rows||'<tr><td colspan=4 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(bifrost_output_tokens_total) by (provider, model, key_name)\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "\u26a1 Upstream latency \u2014 p50/p95/p99",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
+                  "  let text=raw;",
+                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
+                  "  let items=[];",
+                  "  try{",
+                  "    const d=JSON.parse(text);",
+                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
+                  "  }catch(_){",
+                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
+                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
+                  "      const val=valMatch?valMatch[1]:'0';",
+                  "      const labels={};",
+                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
+                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
+                  "      return {metric:labels, value:[null,val]};",
+                  "    });",
+                  "  }",
+                  "  const rows=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1])).map(r=>{ const m=r.metric||{}; const v=parseFloat(r.value[1]); const cls=v>2?'color:#f87171':v>0.5?'color:#fbbf24':'color:#4ade80'; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td style='font-weight:600;${cls}'>${isNaN(v)?'no data':(v*1000).toFixed(0)+'ms'}</td></tr>`; }).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Upstream Latency \u2014 p99</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='query'>histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model))</div><table><thead><tr><th>Provider</th><th>Model</th><th>p99 Latency</th></tr></thead><tbody>${rows||'<tr><td colspan=3 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model))\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "\ud83d\udcc8 Request rate (5m)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
+                  "  let text=raw;",
+                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
+                  "  let items=[];",
+                  "  try{",
+                  "    const d=JSON.parse(text);",
+                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
+                  "  }catch(_){",
+                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
+                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
+                  "      const val=valMatch?valMatch[1]:'0';",
+                  "      const labels={};",
+                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
+                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
+                  "      return {metric:labels, value:[null,val]};",
+                  "    });",
+                  "  }",
+                  "  const rows=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1])).map(r=>{ const m=r.metric||{}; const v=parseFloat(r.value[1]); return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td style='color:#a78bfa;font-weight:600'>${v.toFixed(4)} req/s</td></tr>`; }).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Request Rate (5m avg)</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='query'>sum(rate(bifrost_upstream_requests_total[5m])) by (provider, model)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Rate</th></tr></thead><tbody>${rows||'<tr><td colspan=3 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(rate(bifrost_upstream_requests_total[5m])) by (provider, model)\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "\ud83d\udd01 Token rate (5m)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
+                  "try{",
+                  "  const body=pm.response.json();",
+                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
+                  "  let text=raw;",
+                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
+                  "  let items=[];",
+                  "  try{",
+                  "    const d=JSON.parse(text);",
+                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
+                  "  }catch(_){",
+                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
+                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
+                  "      const val=valMatch?valMatch[1]:'0';",
+                  "      const labels={};",
+                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
+                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
+                  "      return {metric:labels, value:[null,val]};",
+                  "    });",
+                  "  }",
+                  "  const rows=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1])).map(r=>{ const m=r.metric||{}; const v=parseFloat(r.value[1]); return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td style='color:#38bdf8;font-weight:600'>${v.toFixed(2)} tok/s</td></tr>`; }).join('');",
+                  "  pm.visualizer.set(`<style>${styles}</style><h2>Token Rate (5m avg)</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='query'>sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m])) by (provider, model)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Tokens/s</th></tr></thead><tbody>${rows||'<tr><td colspan=3 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
+                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{ADMIN_KEY}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BF}}",
+              "host": [
+                "{{BF}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m])) by (provider, model)\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
