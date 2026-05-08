@@ -385,7 +385,6 @@ The admin folder covers the full range of Kubernetes operations available throug
 - Scale deployments
 - List ArgoCD applications with health and sync status
 
-![Pod logs — line numbered viewer with error/warn/info colour coding](screenshots/pod-logs-visualizer.png)
 
 ### Prometheus Queries
 
