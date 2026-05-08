@@ -21,6 +21,7 @@ bifrost-k8s-demo
 │   ├── network-flow.svg
 │   ├── ollama-bifrost-setup.md
 │   ├── Prometheus MCP Server — Deployment & Demo Guide.md
+│   ├── prometheus-grafana-bifrost.md
 │   ├── README.md
 │   └── screenshots
 │       ├── access-denied-delete-pod.png
@@ -39,6 +40,9 @@ bifrost-k8s-demo
 │       ├── owui-model-selector.png
 │       ├── pods-in-namespace-restricted.png
 │       └── prometheus-mcp-running.png
+├── grafana-dashboards
+│   ├── advanced-bifrost-grafana-dashboard.json
+│   └── bifrost-grafana-dashboard.json
 ├── manifests
 │   ├── bifrost-values-dev.yaml
 │   ├── bifrost-values-prod.yaml
