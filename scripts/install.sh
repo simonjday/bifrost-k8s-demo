@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 NS="ai-gateway"
-BIFROST_VERSION="v1.5.0-prerelease7"
+BIFROST_VERSION="v1.5.0"
 HELM_CHART_REPO="https://maximhq.github.io/bifrost/helm-charts"
 KUBECTL="kubectl${CONTEXT:+ --context $CONTEXT}"
 
@@ -156,8 +156,13 @@ else
   fi
 fi
 
-# ── Step 7: Wait for Bifrost ──────────────────────────────────────────────────
-echo "--- Step 7: Wait for Bifrost pod"
+# ── Step 7: Observability manifests ──────────────────────────────────────────
+echo "--- Step 7: Observability manifests"
+run "$KUBECTL apply -f manifests/bifrost-servicemonitor.yaml"
+run "$KUBECTL apply -f manifests/bifrost-alerts.yaml"
+
+# ── Step 8: Wait for Bifrost ──────────────────────────────────────────────────
+echo "--- Step 8: Wait for Bifrost pod"
 if ! $DRY_RUN; then
   $KUBECTL -n $NS rollout status statefulset/bifrost --timeout=120s
 
@@ -167,8 +172,8 @@ if ! $DRY_RUN; then
   fi
 fi
 
-# ── Step 8: Verify MCP connectivity ──────────────────────────────────────────
-echo "--- Step 8: Verify MCP connectivity"
+# ── Step 9: Verify MCP connectivity ──────────────────────────────────────────
+echo "--- Step 9: Verify MCP connectivity"
 if ! $DRY_RUN; then
   BIFROST_POD=$($KUBECTL -n $NS get pod -l app=bifrost -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "bifrost-0")
   echo "    Testing from pod $BIFROST_POD..."
@@ -184,8 +189,8 @@ if ! $DRY_RUN; then
   fi
 fi
 
-# ── Step 9: Port-forward info ─────────────────────────────────────────────────
-echo "--- Step 9: Port-forward"
+# ── Step 10: Port-forward info ─────────────────────────────────────────────────
+echo "--- Step 10: Port-forward"
 if [[ "$CLUSTER_TYPE" == "k3d" ]]; then
   echo "    Run: $KUBECTL -n $NS port-forward svc/bifrost 8080:8080 &"
   PF_PORT=8080

@@ -60,7 +60,7 @@ Apply it:
 kubectl apply -f manifests/bifrost-servicemonitor.yaml
 ```
 
-> **Note:** This ServiceMonitor is already applied in the cluster (created 2026-05-07). If you're rebuilding the cluster from scratch, run the apply command above.
+> **Note:** This ServiceMonitor is already applied in the cluster. If you're rebuilding the cluster from scratch, run the apply command above. The `bifrost-alerts.yaml` PrometheusRule is applied the same way — see the [Alert Rules](#alert-rules) section.
 
 ---
 
@@ -194,9 +194,13 @@ Template variables: `namespace` and `provider` — both multi-select with All op
 |---|---|---|---|
 | `bifrost_upstream_requests_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace`, `number_of_retries` | Every upstream request |
 | `bifrost_success_requests_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace` | Successful requests only |
+| `bifrost_error_requests_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace`, `status_code` | Failed requests only |
 | `bifrost_input_tokens_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace` | Input tokens consumed |
 | `bifrost_output_tokens_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace` | Output tokens generated |
+| `bifrost_cost_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace` | Accumulated cost (USD) |
 | `bifrost_upstream_latency_seconds` | Histogram | `provider`, `virtual_key_name`, `pod`, `namespace`, `le` | End-to-end upstream latency |
+| `bifrost_stream_first_token_latency_seconds` | Histogram | `provider`, `virtual_key_name`, `pod`, `namespace`, `le` | Time to first token (streaming) |
+| `bifrost_stream_inter_token_latency_seconds` | Histogram | `provider`, `virtual_key_name`, `pod`, `namespace`, `le` | Inter-token latency (streaming) |
 
 ---
 
