@@ -32,7 +32,7 @@ spec:
             description: "Success rate is {{ $value | humanizePercentage }} over the last 5 minutes"
 
         - alert: BifrostHighLatencyP99
-          expr: histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model)) > 10
+          expr: histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model)) > 30
           for: 5m
           labels:
             severity: warning
@@ -41,7 +41,7 @@ spec:
             description: "p99 latency for {{ $labels.provider }}/{{ $labels.model }} is {{ $value | humanizeDuration }}"
 
         - alert: BifrostHighStreamFirstTokenLatency
-          expr: histogram_quantile(0.99, sum(rate(bifrost_stream_first_token_latency_seconds_bucket[5m])) by (le, provider, model)) > 5
+          expr: histogram_quantile(0.99, sum(rate(bifrost_stream_first_token_latency_seconds_bucket[5m])) by (le, provider, model)) > 15
           for: 5m
           labels:
             severity: warning

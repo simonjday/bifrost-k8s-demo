@@ -24,6 +24,46 @@ Prometheus is deployed via the `kube-prometheus-stack` Helm chart in the `monito
 - `kube-prometheus-stack` installed in the `monitoring` namespace (already present in this cluster, Helm release `kube-prometheus-stack`)
 - Bifrost StatefulSet running in `ai-gateway` namespace — see [README.md](../README.md) for setup
 - `kubectl` context set to `kind-devops-lab`
+- **Telemetry plugin enabled in Bifrost config** — see Step 0 below
+
+---
+
+## Step 0 — Enable the Telemetry Plugin
+
+Bifrost v1.5.0 requires the telemetry plugin to be explicitly enabled in `config.json` for the `/metrics` endpoint to emit bifrost-specific metrics. Without this, the endpoint returns only Go runtime metrics and `bifrost_upstream_requests_total` will never appear.
+
+The `bifrost-config` ConfigMap must include a `plugins` array:
+
+```json
+{
+  "plugins": [
+    {
+      "name": "telemetry",
+      "enabled": true
+    }
+  ]
+}
+```
+
+Apply the updated ConfigMap (see `manifests/bifrost-config.json`) and restart:
+
+```bash
+kubectl create configmap bifrost-config \
+  --from-file=config.json=manifests/bifrost-config.json \
+  -n ai-gateway \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl rollout restart statefulset/bifrost -n ai-gateway
+```
+
+Confirm it loaded in the pod logs:
+
+```bash
+kubectl logs -n ai-gateway statefulset/bifrost --tail=20 | grep "plugin status"
+# Expected: plugin status: telemetry - active
+```
+
+> **Note:** This is already applied in the cluster. If rebuilding from scratch, run the above before applying the ServiceMonitor — otherwise Prometheus will scrape an empty metrics endpoint with no bifrost counters.
 
 ---
 
@@ -240,8 +280,8 @@ A `PrometheusRule` resource is deployed in the `monitoring` namespace with 6 ale
 |---|---|---|---|
 | `BifrostHighErrorRate` | critical | > 5 errors/sec | 5m |
 | `BifrostLowSuccessRate` | critical | success rate < 90% | 5m |
-| `BifrostHighLatencyP99` | warning | p99 upstream latency > 10s | 5m |
-| `BifrostHighStreamFirstTokenLatency` | warning | p99 TTFT > 5s | 5m |
+| `BifrostHighLatencyP99` | warning | p99 upstream latency > 30s | 5m |
+| `BifrostHighStreamFirstTokenLatency` | warning | p99 TTFT > 15s | 5m |
 | `BifrostHighTokenBurnRate` | warning | > 1000 tokens/sec combined | 5m |
 | `BifrostHighCostRate` | warning | projected spend > $1/hr | 10m |
 
@@ -346,8 +386,8 @@ kubectl apply -f manifests/bifrost-alerts.yaml
 |---|---|---|
 | `BifrostHighErrorRate` | > 5/sec | Lower for production |
 | `BifrostLowSuccessRate` | < 90% | Consider 95–99% for production |
-| `BifrostHighLatencyP99` | > 10s | Raise for Ollama on CPU |
-| `BifrostHighStreamFirstTokenLatency` | > 5s | Ollama on CPU will routinely exceed this |
+| `BifrostHighLatencyP99` | > 30s | Raised from 10s — Ollama on CPU regularly hits 10-15s |
+| `BifrostHighStreamFirstTokenLatency` | > 15s | Raised from 5s — Ollama on CPU TTFT is slower than cloud providers |
 | `BifrostHighTokenBurnRate` | > 1000 tok/sec | Tune to expected throughput |
 | `BifrostHighCostRate` | > $1/hr | Adjust to your budget |
 

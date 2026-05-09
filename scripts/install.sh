@@ -158,6 +158,11 @@ fi
 
 # ── Step 7: Observability manifests ──────────────────────────────────────────
 echo "--- Step 7: Observability manifests"
+echo "    Applying Bifrost config (telemetry plugin enabled)..."
+run "$KUBECTL create configmap bifrost-config \
+  --from-file=config.json=manifests/bifrost-config.json \
+  -n $NS \
+  --dry-run=client -o yaml | $KUBECTL apply -f -"
 run "$KUBECTL apply -f manifests/bifrost-servicemonitor.yaml"
 run "$KUBECTL apply -f manifests/bifrost-alerts.yaml"
 
