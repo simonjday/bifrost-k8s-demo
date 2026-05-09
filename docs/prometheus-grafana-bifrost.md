@@ -11,6 +11,7 @@ Bifrost StatefulSet (ai-gateway)
   └── /metrics endpoint on port 8080 (http)
         └── ServiceMonitor (monitoring/bifrost)
               └── Prometheus (kube-prometheus-stack)
+                    ├── PrometheusRule (monitoring/bifrost-alerts) → Alertmanager
                     └── Grafana datasource → Grafana dashboards
 ```
 
@@ -220,6 +221,131 @@ sum(rate(bifrost_upstream_requests_total[5m])) by (virtual_key_name)
 sum(rate(bifrost_upstream_requests_total{number_of_retries!="0"}[5m]))
   / sum(rate(bifrost_upstream_requests_total[5m]))
 ```
+
+---
+
+## Alert Rules
+
+A `PrometheusRule` resource is deployed in the `monitoring` namespace with 6 alerts covering errors, latency, token burn, and cost. The manifest is at `manifests/bifrost-alerts.yaml`.
+
+> **Note:** This PrometheusRule is already applied in the cluster. If rebuilding from scratch, run `kubectl apply -f manifests/bifrost-alerts.yaml`.
+
+### Deployed Alerts
+
+| Alert | Severity | Condition | For |
+|---|---|---|---|
+| `BifrostHighErrorRate` | critical | > 5 errors/sec | 5m |
+| `BifrostLowSuccessRate` | critical | success rate < 90% | 5m |
+| `BifrostHighLatencyP99` | warning | p99 upstream latency > 10s | 5m |
+| `BifrostHighStreamFirstTokenLatency` | warning | p99 TTFT > 5s | 5m |
+| `BifrostHighTokenBurnRate` | warning | > 1000 tokens/sec combined | 5m |
+| `BifrostHighCostRate` | warning | projected spend > $1/hr | 10m |
+
+### Manifest
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: bifrost-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: bifrost.rules
+      interval: 30s
+      rules:
+        - alert: BifrostHighErrorRate
+          expr: sum(rate(bifrost_error_requests_total[5m])) > 5
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: High Bifrost error rate
+            description: "Bifrost error rate is {{ $value | humanize }} errors/sec over the last 5 minutes"
+
+        - alert: BifrostLowSuccessRate
+          expr: |
+            sum(rate(bifrost_success_requests_total[5m])) /
+            sum(rate(bifrost_upstream_requests_total[5m])) < 0.9
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Bifrost success rate below 90%
+            description: "Success rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+        - alert: BifrostHighLatencyP99
+          expr: histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model)) > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bifrost upstream p99 latency is high
+            description: "p99 latency for {{ $labels.provider }}/{{ $labels.model }} is {{ $value | humanizeDuration }}"
+
+        - alert: BifrostHighStreamFirstTokenLatency
+          expr: histogram_quantile(0.99, sum(rate(bifrost_stream_first_token_latency_seconds_bucket[5m])) by (le, provider, model)) > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bifrost time-to-first-token p99 is high
+            description: "TTFT p99 for {{ $labels.provider }}/{{ $labels.model }} is {{ $value | humanizeDuration }}"
+
+        - alert: BifrostHighTokenBurnRate
+          expr: sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m])) > 1000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bifrost token consumption rate is high
+            description: "Token burn rate is {{ $value | humanize }} tokens/sec — check for runaway requests"
+
+        - alert: BifrostHighCostRate
+          expr: sum(rate(bifrost_cost_total[1h])) * 3600 > 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bifrost cost accruing rapidly
+            description: "Projected hourly cost is ${{ $value | humanize }}"
+```
+
+### Verify alerts loaded
+
+```bash
+curl -s http://localhost:9090/api/v1/rules \
+  | jq '.data.groups[].rules[] | select(.name | startswith("Bifrost")) | {name, state, health}'
+```
+
+### Test an alert (lower threshold to trigger)
+
+```bash
+# Lower BifrostHighErrorRate threshold to 0 to force firing
+kubectl patch prometheusrule bifrost-alerts -n monitoring --type='json' \
+  -p='[{"op":"replace","path":"/spec/groups/0/rules/0/expr","value":"sum(rate(bifrost_error_requests_total[5m])) > 0"}]'
+
+# Watch state: inactive → pending → firing (takes up to 5m due to 'for' duration)
+curl -s http://localhost:9090/api/v1/rules \
+  | jq '.data.groups[].rules[] | select(.name | startswith("Bifrost")) | {name, state}'
+
+# Restore
+kubectl apply -f manifests/bifrost-alerts.yaml
+```
+
+### Threshold tuning
+
+| Alert | Default | Notes |
+|---|---|---|
+| `BifrostHighErrorRate` | > 5/sec | Lower for production |
+| `BifrostLowSuccessRate` | < 90% | Consider 95–99% for production |
+| `BifrostHighLatencyP99` | > 10s | Raise for Ollama on CPU |
+| `BifrostHighStreamFirstTokenLatency` | > 5s | Ollama on CPU will routinely exceed this |
+| `BifrostHighTokenBurnRate` | > 1000 tok/sec | Tune to expected throughput |
+| `BifrostHighCostRate` | > $1/hr | Adjust to your budget |
 
 ---
 

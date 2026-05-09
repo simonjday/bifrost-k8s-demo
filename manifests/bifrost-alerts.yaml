@@ -1,0 +1,68 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: bifrost-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: bifrost.rules
+      interval: 30s
+      rules:
+        - alert: BifrostHighErrorRate
+          expr: sum(rate(bifrost_error_requests_total[5m])) > 5
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: High Bifrost error rate
+            description: "Bifrost error rate is {{ $value | humanize }} errors/sec over the last 5 minutes"
+
+        - alert: BifrostLowSuccessRate
+          expr: |
+            sum(rate(bifrost_success_requests_total[5m])) /
+            sum(rate(bifrost_upstream_requests_total[5m])) < 0.9
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Bifrost success rate below 90%
+            description: "Success rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+        - alert: BifrostHighLatencyP99
+          expr: histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model)) > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bifrost upstream p99 latency is high
+            description: "p99 latency for {{ $labels.provider }}/{{ $labels.model }} is {{ $value | humanizeDuration }}"
+
+        - alert: BifrostHighStreamFirstTokenLatency
+          expr: histogram_quantile(0.99, sum(rate(bifrost_stream_first_token_latency_seconds_bucket[5m])) by (le, provider, model)) > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bifrost time-to-first-token p99 is high
+            description: "TTFT p99 for {{ $labels.provider }}/{{ $labels.model }} is {{ $value | humanizeDuration }}"
+
+        - alert: BifrostHighTokenBurnRate
+          expr: sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m])) > 1000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bifrost token consumption rate is high
+            description: "Token burn rate is {{ $value | humanize }} tokens/sec — check for runaway requests"
+
+        - alert: BifrostHighCostRate
+          expr: sum(rate(bifrost_cost_total[1h])) * 3600 > 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bifrost cost accruing rapidly
+            description: "Projected hourly cost is ${{ $value | humanize }}"
