@@ -7,50 +7,60 @@ A complete demo environment for [Bifrost AI Gateway](https://github.com/maximhq/
 ```
 bifrost-k8s-demo
 ├── docs
-│   ├── Additional-MCP-Server-Guides
-│   │   ├── Argo CD MCP Server — Deployment Guide.md
-│   │   ├── AWS MCP Server — Deployment & Demo Guide.md
-│   │   ├── Azure MCP Server — Deployment & Demo Guide.md
-│   │   ├── Datadog MCP Server — Deployment & Demo Guide.md
-│   │   ├── Dynatrace MCP Server — Deployment & Demo Guide.md
-│   │   ├── GitHub MCP Server — Deployment & Demo Guide.md
-│   │   └── Grafana MCP Server — Deployment & Demo Guide.md
-│   ├── bifrost-analysis.md
-│   ├── demo-guide.md
-│   ├── gateway-comparison.md
-│   ├── network-flow.svg
-│   ├── ollama-bifrost-setup.md
-│   ├── Prometheus MCP Server — Deployment & Demo Guide.md
-│   ├── prometheus-grafana-bifrost.md
-│   ├── README.md
-│   └── screenshots
-│       ├── access-denied-delete-pod.png
-│       ├── bifrost-access-control.png
-│       ├── bifrost-dashboard.png
-│       ├── bifrost-latency-p99.png
-│       ├── bifrost-llm-logs.png
-│       ├── bifrost-logs.png
-│       ├── bifrost-mcp-catalog.png
-│       ├── bifrost-total-requests.png
-│       ├── cpu-usage-by-pod.png
-│       ├── instant-query-up-targets.png
-│       ├── owui-basic-chat.png
-│       ├── owui-gemma4-triage-response.png
-│       ├── owui-model-comparison.png
-│       ├── owui-model-selector.png
-│       ├── pods-in-namespace-restricted.png
-│       └── prometheus-mcp-running.png
+│   ├── Additional-MCP-Server-Guides
+│   │   ├── Argo CD MCP Server — Deployment Guide.md
+│   │   ├── AWS MCP Server — Deployment & Demo Guide.md
+│   │   ├── Azure MCP Server — Deployment & Demo Guide.md
+│   │   ├── Datadog MCP Server — Deployment & Demo Guide.md
+│   │   ├── Dynatrace MCP Server — Deployment & Demo Guide.md
+│   │   ├── GitHub MCP Server — Deployment & Demo Guide.md
+│   │   └── Grafana MCP Server — Deployment & Demo Guide.md
+│   ├── bifrost-analysis.md
+│   ├── BIFROST_METRICS_QUERY_REFERENCE.md
+│   ├── bifrost-mcp-quickref.md
+│   ├── bifrost-mcp-rebuild-guide.md
+│   ├── demo-guide.md
+│   ├── gateway-comparison.md
+│   ├── network-flow.svg
+│   ├── ollama-bifrost-setup.md
+│   ├── Prometheus MCP Server — Deployment & Demo Guide.md
+│   ├── prometheus-grafana-bifrost.md
+│   ├── README.md
+│   ├── SERVICEMONITOR_DEBUG_QUICK_REF.md
+│   ├── SESSION_RECAP_2026-05-12-prometheus-bifrost-fix.md
+│   └── screenshots
+│       ├── access-denied-delete-pod.png
+│       ├── bifrost-access-control.png
+│       ├── bifrost-dashboard.png
+│       ├── bifrost-latency-p99.png
+│       ├── bifrost-llm-logs.png
+│       ├── bifrost-logs.png
+│       ├── bifrost-mcp-catalog.png
+│       ├── bifrost-total-requests.png
+│       ├── cpu-usage-by-pod.png
+│       ├── instant-query-up-targets.png
+│       ├── owui-basic-chat.png
+│       ├── owui-gemma4-triage-response.png
+│       ├── owui-model-comparison.png
+│       ├── owui-model-selector.png
+│       ├── pods-in-namespace-restricted.png
+│       └── prometheus-mcp-running.png
 ├── grafana-dashboards
-│   ├── advanced-bifrost-grafana-dashboard.json
-│   └── bifrost-grafana-dashboard.json
+│   ├── advanced-bifrost-grafana-dashboard.json
+│   └── bifrost-grafana-dashboard.json
 ├── manifests
-│   ├── bifrost-values-dev.yaml
-│   ├── bifrost-values-prod.yaml
-│   ├── mcp-kubernetes-host-svc.yaml
-│   ├── mcp-kubernetes-proxy-kind.yaml
-│   └── namespace.yaml
+│   ├── bifrost-alerts.yaml
+│   ├── bifrost-config.json
+│   ├── bifrost-servicemonitor.yaml
+│   ├── bifrost-values-dev.yaml
+│   ├── bifrost-values-prod.yaml
+│   ├── mcp-kubernetes-host-svc.yaml
+│   ├── mcp-kubernetes-proxy-kind.yaml
+│   ├── namespace.yaml
+│   ├── prometheus-mcp-deployment-fixed.yaml
+│   └── prometheus-mcp.yaml
 ├── postman
-│   └── bifrost-k8s-mcp.postman_collection.json
+│   └── bifrost-k8s-mcp_postman_collection.json
 ├── README.md
 └── scripts
     ├── bifrost-sim.sh
@@ -58,6 +68,7 @@ bifrost-k8s-demo
     ├── install.sh
     ├── start-mcp-server.sh
     ├── teardown.sh
+    ├── test-prometheus-connectivity.sh
     └── warmup-ollama.sh
 ```
 
@@ -185,110 +196,39 @@ Mac Host
 ```
 
 **Key networking details:**
-- **Socat proxy:** Bifrost reaches Mac MCP server via DNS (`mcp-kubernetes-sse.svc`) → socat pod → Mac IP (192.168.1.21:8811)
-- **Ollama:** Direct route from kind to Mac via Docker Desktop bridge (192.168.1.21:11434)
-- **Prometheus MCP:** In-cluster service in `monitoring` namespace, no external routing needed
-
-### Prometheus Metrics Flow
-
-Bifrost exposes `/metrics` on port 8080. A ServiceMonitor (label `release: kube-prometheus-stack`) scrapes it every 15 seconds. The `prometheus-mcp` pod wraps the `prometheus-mcp-server` binary via supergateway, making all 28 Prometheus tools available through Bifrost's MCP endpoint.
-
-```
-Bifrost pod → /metrics → Prometheus (ServiceMonitor) → prometheus-mcp → Bifrost /mcp
-```
-
----
-
-## MCP Server — Kubernetes LaunchAgent Setup
-
-The `kubernetes-mcp-server` runs as a macOS LaunchAgent, starts automatically at login, and restarts on crash.
-
-### Install (one-time)
-
-```bash
-# 1. Install the LaunchAgent
-cp scripts/com.local.mcp-kubernetes-sse.plist ~/Library/LaunchAgents/
-launchctl load -w ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
-
-# 2. Verify it is running
-curl -v --max-time 5 http://localhost:8811/sse
-# Expected: event: endpoint
-
-# 3. Verify reachability from inside the Bifrost pod
-kubectl exec -n ai-gateway bifrost-0 -- \
-  wget -qO- http://192.168.1.21:8811/sse --timeout=3 2>&1 | head -2
-# Expected: event: endpoint
-```
-
-### Verify MCP Integration
-
-```bash
-# Check all tools registered
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $KEY_ALL" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
-  | jq '[.result.tools[].name] | group_by(split("-")[0]) | map({prefix: .[0] | split("-")[0], count: length})'
-
-# Call a Kubernetes tool
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $KEY_ALL" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"new_kubernetes_local-pods_list_in_namespace","arguments":{"namespace":"ai-gateway"}}}' \
-  | jq -r '.result.content[0].text'
-
-# Call a Prometheus tool
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $KEY_ALL" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"prometheus-healthy","arguments":{}}}' \
-  | jq -r '.result.content[0].text'
-
-# Agentic mode — LLM calls Kubernetes tools autonomously
-curl -s -X POST http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $KEY_ALL" \
-  -H "x-bf-mcp-include-clients: new_kubernetes_local" \
-  -d '{"model":"anthropic/claude-haiku-4-5-20251001","messages":[{"role":"user","content":"List all pods in the ai-gateway namespace"}]}' \
-  | jq -r '.choices[0].message.content'
-```
-
-### LaunchAgent Management
-
-```bash
-# Logs
-tail -f /tmp/mcp-kubernetes-sse.log
-
-# Restart (e.g. after kind cluster restart)
-launchctl stop com.local.mcp-kubernetes-sse
-launchctl start com.local.mcp-kubernetes-sse
-
-# Reload after editing the plist
-launchctl unload ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
-launchctl load -w ~/Library/LaunchAgents/com.local.mcp-kubernetes-sse.plist
-```
+- Bifrost inside kind **cannot** use `localhost` — must use Mac's LAN IP (`192.168.1.21`) for Ollama/MCP server
+- Ollama is reachable via Docker Desktop gateway (`192.168.65.254:11434`), **not** Mac LAN IP
+- In-cluster services resolved via DNS (e.g., `prometheus-mcp.monitoring.svc.cluster.local`)
 
 ---
 
 ## Postman Collection
 
-`postman/bifrost-k8s-mcp.postman_collection.json` contains 40 requests across 5 folders with formatted visualizations in the Visualize tab.
+The Postman collection (`postman/bifrost-k8s-mcp_postman_collection.json`) includes **10 Bifrost metric queries**:
 
-| Folder | Key | Purpose |
-|---|---|---|
-| 🔒 Restricted (Read-Only) | `RESTRICTED_KEY` | 7 read-only Kubernetes tools |
-| 🚫 Restricted — Access Denied | `RESTRICTED_KEY` | Intentional failures showing governance enforcement |
-| 🔑 Admin (Full Access) | `ADMIN_KEY` | Full Kubernetes operations — logs, exec, scale, delete |
-| 🔥 Prometheus — Metrics & Queries | `ADMIN_KEY` | 14 Prometheus queries via MCP |
-| 🔮 Bifrost — Gateway Metrics | `ADMIN_KEY` | 8 LLM usage metric queries |
+### 🔮 Bifrost — Gateway Metrics (5 queries via MCP)
+These queries call Bifrost's MCP interface. Due to a hard-coded timeout in the Prometheus MCP server binary (v0.18.0), these may timeout after pod restarts (see **Known Issues** below).
 
-Set three collection variables before running: `BF` (`http://localhost:8080/mcp`), `ADMIN_KEY`, `RESTRICTED_KEY`.
+- **All Bifrost metrics (instant)** — `bifrost_success_requests_total`
+- **Request rate by provider (5m)** — `rate(bifrost_success_requests_total[5m])`
+- **Error rate by provider (5m)** — `bifrost_error_requests_total`
+- **P95 latency by model (5m)** — Latency percentiles by model
+- **Token throughput (5m)** — `bifrost_output_tokens_total`
 
-![Bifrost MCP Catalog showing both servers connected](docs/screenshots/bifrost-mcp-catalog.png)
+### 🔧 Direct Prometheus Queries (5 queries — RECOMMENDED FOR STABILITY)
+These queries call Prometheus directly via HTTP API, **bypassing the MCP interface entirely**. These are always stable and never timeout.
+
+- **All Bifrost Metrics (Instant)** — `bifrost_success_requests_total`
+- **Bifrost Errors (Instant)** — `bifrost_error_requests_total`
+- **Success Rate by Provider (5m avg)** — `rate(bifrost_success_requests_total[5m])`
+- **Token Throughput (5m)** — `rate(bifrost_output_tokens_total[5m])`
+- **Range Query: Requests Over Time (1h)** — Time series with visualizations
+
+All queries include **working visualizations** that parse response data and display metrics in tables.
 
 ---
 
-## Traffic Simulation
+## Testing & Metrics
 
 Generate synthetic traffic through Bifrost to populate Prometheus metrics:
 
@@ -297,7 +237,7 @@ bash scripts/bifrost-sim.sh        # 40 requests (default)
 bash scripts/bifrost-sim.sh 100    # custom count
 ```
 
-Rotates across `llama3.2:3b` and `qwen2.5-coder:7b`. Wait ~30 seconds after completion for Prometheus to scrape, then run the 🔮 Bifrost folder in Postman.
+Rotates across `llama3.2:3b` and `qwen2.5-coder:7b`. Wait ~30 seconds after completion for Prometheus to scrape, then run the 🔧 **Direct Prometheus Queries** folder in Postman.
 
 ![Bifrost total requests showing 144 requests by provider and model](docs/screenshots/bifrost-total-requests.png)
 
@@ -403,9 +343,10 @@ curl -s -X POST http://localhost:8080/mcp \
 |---|---|
 | `install.sh` fails: "command not found: kubectl --context kind-devops-lab" | Use fixed version from repo — kubectl_cmd() function replaces string variable. Handles word-splitting in conditionals properly |
 | Helm release stuck: "cannot reuse a name that is still in use" | `helm uninstall bifrost -n ai-gateway` before re-running install script |
-| Prometheus MCP `listen tcp :8080: bind: address already in use` | Manifest args are malformed. Must use `command: ["node"]` entry point with proper args array (no shell string). See manifests/prometheus-mcp.yaml |
-| Prometheus MCP pod stuck initializing | Supergateway expects stateless HTTP transport. Ensure deployment uses `--outputTransport streamableHttp` and `--web.listen-address=:0` (random port for Prometheus binary) |
-| Prometheus not scraping Bifrost (ServiceMonitor "No active targets") | ServiceMonitor selector must match **service labels**, not pod labels. Fix: `selector: {matchLabels: {app.kubernetes.io/name: bifrost}}` and label `release: kube-prometheus-stack`. See manifests/bifrost-servicemonitor.yaml |
+| Prometheus MCP `listen tcp :8080: bind: address already in use` | Manifest args are malformed. Must use `command: ["node"]` entry point with proper args array (no shell string). See manifests/prometheus-mcp-deployment-fixed.yaml |
+| Prometheus MCP pod stuck initializing | Supergateway expects stateless HTTP transport. Ensure deployment uses `--outputTransport streamableHttp` and `--web.listen-address=:0` (random port for Prometheus binary). Remove health probes. |
+| **Prometheus MCP server exits after ~5 seconds (KNOWN LIMITATION)** | **Hard-coded timeout in prometheus-mcp-server binary (v0.18.0).** Workaround: Use **Direct Prometheus Queries** folder in Postman (bypasses MCP interface entirely). Direct curl to Prometheus also works: `curl -s 'http://localhost:9090/api/v1/query?query=bifrost_success_requests_total'` |
+| Prometheus not scraping Bifrost (ServiceMonitor "No active targets") | ServiceMonitor selector must match **service labels**, not pod labels. Fix: `selector: {matchLabels: {app.kubernetes.io/name: bifrost}}` and label `release: kube-prometheus-stack`. See [ServiceMonitor Debug Quick Ref](docs/SERVICEMONITOR_DEBUG_QUICK_REF.md) |
 | Bifrost metrics not appearing in Prometheus | After fixing ServiceMonitor selector, restart Prometheus: `kubectl -n monitoring delete pod prometheus-kube-prometheus-stack-prometheus-0`. Wait 30s for scrape. Query test: `curl -s 'http://localhost:9090/api/v1/query?query=bifrost_success_requests_total'` |
 | prometheus tools return 0 after Bifrost restart | Key permission cache is stale. Bifrost UI → Virtual Keys → toggle **Is this key active?** OFF for 3s, then ON |
 | Bifrost can't reach MCP servers in-cluster | Test from Bifrost pod: `kubectl -n ai-gateway exec bifrost-0 -- wget -v http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/healthz`. Verify socat proxy is running: `kubectl -n ai-gateway get pods -l app=mcp-kubernetes-proxy` |
@@ -467,12 +408,19 @@ curl -s -X POST http://localhost:8080/mcp \
 
 | Doc | Purpose |
 |---|---|
-| [docs/bifrost-mcp-rebuild-guide.md](docs/bifrost-mcp-rebuild-guide.md) | **[NEW]** Step-by-step guide for full cluster rebuild, Bifrost install, observability, and MCP setup |
-| [docs/bifrost-mcp-quickref.md](docs/bifrost-mcp-quickref.md) | **[NEW]** Quick reference, health checks, troubleshooting, and common debugging commands |
 | [docs/demo-guide.md](docs/demo-guide.md) | Primary demo playbook — 11 demos |
+| [docs/bifrost-mcp-rebuild-guide.md](docs/bifrost-mcp-rebuild-guide.md) | Step-by-step guide for full cluster rebuild, Bifrost install, observability, and MCP setup |
+| [docs/bifrost-mcp-quickref.md](docs/bifrost-mcp-quickref.md) | Quick reference, health checks, troubleshooting, and common debugging commands |
+| [docs/BIFROST_METRICS_QUERY_REFERENCE.md](docs/BIFROST_METRICS_QUERY_REFERENCE.md) | **[NEW]** All Bifrost metrics and example PromQL queries |
+| [docs/SERVICEMONITOR_DEBUG_QUICK_REF.md](docs/SERVICEMONITOR_DEBUG_QUICK_REF.md) | **[NEW]** ServiceMonitor troubleshooting and debug checklist |
+| [docs/SESSION_RECAP_2026-05-12-prometheus-bifrost-fix.md](docs/SESSION_RECAP_2026-05-12-prometheus-bifrost-fix.md) | **[NEW]** This session's Prometheus integration fixes and root cause analysis |
 | [docs/Prometheus MCP Server — Deployment & Demo Guide.md](docs/Prometheus%20MCP%20Server%20—%20Deployment%20%26%20Demo%20Guide.md) | Prometheus MCP setup, ServiceMonitor, Postman collection |
+| [docs/prometheus-grafana-bifrost.md](docs/prometheus-grafana-bifrost.md) | Bifrost metrics in Prometheus & Grafana — ServiceMonitor, dashboard import, PromQL reference |
 | [docs/ollama-bifrost-setup.md](docs/ollama-bifrost-setup.md) | Ollama config, model management, Claude Desktop integration |
 | [docs/bifrost-analysis.md](docs/bifrost-analysis.md) | Bifrost vendor analysis, test scenarios |
 | [docs/gateway-comparison.md](docs/gateway-comparison.md) | Bifrost vs LiteLLM vs Portkey vs Kong vs Helicone |
 | [docs/Additional-MCP-Server-Guides/](docs/Additional-MCP-Server-Guides/) | Setup guides for ArgoCD, AWS, Azure, Datadog, Dynatrace, GitHub, Grafana MCP servers |
-| [docs/prometheus-grafana-bifrost.md](docs/prometheus-grafana-bifrost.md) | Bifrost metrics in Prometheus & Grafana — ServiceMonitor, dashboard import, PromQL reference |
+
+---
+
+**Last Updated:** May 12, 2026 — Prometheus Integration, Stability Notes, and Direct Query Workarounds
