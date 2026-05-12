@@ -49,9 +49,45 @@ Bifrost install creates:
 - `manifests/bifrost-servicemonitor.yaml` — Prometheus scrapes Bifrost metrics
 - `manifests/bifrost-alerts.yaml` — PrometheusRule with alerting rules
 
-### ServiceMonitor
+### ServiceMonitor (CRITICAL FIX)
 
-Targets `bifrost` service in `ai-gateway`, scrapes port `http` (8080) every 15s, auto-discovered by kube-prometheus-stack via `release: prometheus` label.
+The ServiceMonitor selector **must match the Bifrost service labels**, not pod labels.
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bifrost
+  namespace: ai-gateway
+  labels:
+    app: bifrost
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bifrost
+  endpoints:
+  - port: http
+    interval: 15s
+    path: /metrics
+    scheme: http
+```
+
+**Key points:**
+- Selector `app.kubernetes.io/name: bifrost` — matches the Bifrost **service** labels (not pod labels)
+- Label `release: kube-prometheus-stack` — required by Prometheus operator's ServiceMonitorSelector
+- Port `http` and path `/metrics` — must match actual service configuration
+
+### Verify ServiceMonitor is discovered
+
+```bash
+kubectl -n monitoring logs kube-prometheus-stack-operator-7c5ddfb54f-9csvc --tail=20 | grep bifrost
+# Should show: config=serviceMonitor/ai-gateway/bifrost/0
+
+# Then check Prometheus targets
+curl -s 'http://localhost:9090/api/v1/targets' | jq '.data.activeTargets[] | select(.labels.job=="bifrost") | .health'
+# Should show: "up"
+```
 
 ### PrometheusRule
 
@@ -96,7 +132,7 @@ Expected: `event: endpoint` stream.
 
 ## Step 5: Deploy Prometheus MCP Server
 
-**CRITICAL:** Use supergateway as the entry point with proper `command`/`args` syntax. Do NOT use shell loops or direct binary invocation.
+**CRITICAL:** Use supergateway as the entry point with proper `command`/`args` syntax. Do NOT use shell loops.
 
 ### Deploy
 
@@ -113,21 +149,9 @@ kubectl -n monitoring rollout status deploy/prometheus-mcp --timeout=60s
 ### Verify it's running
 
 ```bash
-kubectl -n monitoring logs -l app=prometheus-mcp --tail=30
+kubectl -n monitoring logs -l app=prometheus-mcp --tail=30 | grep "tool_count"
+# Should show: msg="MCP server created" tool_count=28
 ```
-
-Expected output (no port bind errors):
-```
-msg="MCP server created" prometheus_url=http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090 tool_count=28
-msg="server session connected"
-msg="session initialized"
-```
-
-**Troubleshooting port conflict:**
-- If you see `listen tcp :8080: bind: address already in use`, verify the manifest:
-  1. Uses `command: ["node"]` entry point (not shell script)
-  2. Has proper args array formatting
-  3. Includes `--web.listen-address=:0` (tells Prometheus to use random port)
 
 ## Step 6: Configure MCP Servers in Bifrost
 
@@ -153,18 +177,18 @@ Open http://localhost:8080 → **MCP** tab → **+ New MCP Server**.
 
 ### Grant Virtual Key Permissions
 
-Go to **Virtual Keys** → select your key → **Edit** → **MCP Servers** section:
+Go to **Virtual Keys** → select your key → **Edit** → **MCP Servers**:
 - Enable both `kubernetes-local` and `prometheus`
 - Set **Allowed Tools:** `Allow All Tools`
 - **Save**
 
-### Refresh Key Permissions (Important!)
+### Refresh Key Permissions After Restart
 
-After restarting Bifrost or Prometheus MCP, the key permission cache becomes stale:
+After restarting Bifrost or Prometheus MCP, refresh the key permission cache:
 
 1. Bifrost UI → **Virtual Keys** → your key
 2. Toggle **Is this key active?** OFF → wait 3 seconds → ON
-3. Verify tools:
+3. Verify:
 
 ```bash
 curl -s -X POST http://localhost:8080/mcp \
@@ -172,9 +196,8 @@ curl -s -X POST http://localhost:8080/mcp \
   -H "X-Api-Key: $YOUR_KEY" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | \
   grep -o '"name":"prometheus' | wc -l
+# Should return: 28
 ```
-
-Expected: `28` (Prometheus tools).
 
 ## Step 7: Verify Both MCP Servers Connected
 
@@ -212,7 +235,7 @@ curl -s -X POST http://localhost:8080/mcp \
 curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: $YOUR_KEY" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"prometheus-query","arguments":{"query":"up"}}}' | \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"prometheus-query","arguments":{"query":"bifrost_success_requests_total"}}}' | \
   jq '.result.content[0].text' | head -c 200
 ```
 
@@ -223,34 +246,27 @@ bash scripts/bifrost-sim.sh 50
 sleep 30  # Wait for Prometheus to scrape
 ```
 
-Then test Bifrost metrics:
-
-```bash
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: $YOUR_KEY" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"prometheus-query","arguments":{"query":"bifrost_gateway_requests_total"}}}' | \
-  jq '.result.content[0].text' | head -c 200
-```
+Then Bifrost metric queries will return data.
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `scripts/install.sh` | Bifrost + observability installer |
-| `manifests/bifrost-servicemonitor.yaml` | Prometheus scrape config |
+| `manifests/bifrost-servicemonitor.yaml` | Prometheus scrape config (corrected selector) |
 | `manifests/bifrost-alerts.yaml` | PrometheusRule alerts |
-| `manifests/prometheus-mcp.yaml` | Prometheus MCP server (supergateway-wrapped) |
+| `manifests/prometheus-mcp.yaml` | Prometheus MCP server deployment |
+| `scripts/com.local.mcp-kubernetes-sse.plist` | Kubernetes MCP server LaunchAgent |
 
-## Known Issues & Fixes
+## Troubleshooting
 
-| Issue | Fix |
+| Issue | Solution |
 |---|---|
-| `helm install bifrost ... Error: cannot reuse a name` | `helm uninstall bifrost -n ai-gateway` first |
-| Prometheus MCP `bind: address already in use` | Use proper `command: ["node"]` with correct args array (no shell loop) |
-| prometheus tools return 0 after Bifrost restart | Toggle virtual key active OFF/ON to refresh cache |
-| Kubernetes tools timeout | Verify LaunchAgent: `curl http://localhost:8811/sse` |
-| Prometheus query empty result | Verify metric exists in Prometheus UI: `http://localhost:9090` |
+| `helm install bifrost ... Error: cannot reuse a name` | Run `helm uninstall bifrost -n ai-gateway` first |
+| Prometheus MCP `listen tcp :8080: bind: address already in use` | Check manifest args syntax; use proper `command: ["node"]` entry point |
+| Tools show 0 in tools/list after restart | Toggle virtual key active OFF/ON to refresh permission cache |
+| Prometheus not scraping Bifrost | Check ServiceMonitor selector matches service labels (`app.kubernetes.io/name: bifrost`). Check label `release: kube-prometheus-stack` |
+| Bifrost metrics not in Prometheus | Verify `/metrics` endpoint works: `kubectl -n ai-gateway exec bifrost-0 -- wget -qO- http://localhost:8080/metrics \| head` |
 
 ## Next Steps
 

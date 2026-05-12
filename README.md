@@ -405,14 +405,12 @@ curl -s -X POST http://localhost:8080/mcp \
 | Helm release stuck: "cannot reuse a name that is still in use" | `helm uninstall bifrost -n ai-gateway` before re-running install script |
 | Prometheus MCP `listen tcp :8080: bind: address already in use` | Manifest args are malformed. Must use `command: ["node"]` entry point with proper args array (no shell string). See manifests/prometheus-mcp.yaml |
 | Prometheus MCP pod stuck initializing | Supergateway expects stateless HTTP transport. Ensure deployment uses `--outputTransport streamableHttp` and `--web.listen-address=:0` (random port for Prometheus binary) |
+| Prometheus not scraping Bifrost (ServiceMonitor "No active targets") | ServiceMonitor selector must match **service labels**, not pod labels. Fix: `selector: {matchLabels: {app.kubernetes.io/name: bifrost}}` and label `release: kube-prometheus-stack`. See manifests/bifrost-servicemonitor.yaml |
+| Bifrost metrics not appearing in Prometheus | After fixing ServiceMonitor selector, restart Prometheus: `kubectl -n monitoring delete pod prometheus-kube-prometheus-stack-prometheus-0`. Wait 30s for scrape. Query test: `curl -s 'http://localhost:9090/api/v1/query?query=bifrost_success_requests_total'` |
 | prometheus tools return 0 after Bifrost restart | Key permission cache is stale. Bifrost UI → Virtual Keys → toggle **Is this key active?** OFF for 3s, then ON |
 | Bifrost can't reach MCP servers in-cluster | Test from Bifrost pod: `kubectl -n ai-gateway exec bifrost-0 -- wget -v http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/healthz`. Verify socat proxy is running: `kubectl -n ai-gateway get pods -l app=mcp-kubernetes-proxy` |
 | MCP clients show as `null` name in Bifrost | They're still functional; name field is for UI labels. Explicitly set server names in Bifrost config JSON if desired |
 | Tool not found | Use correct prefix: `new_kubernetes_local-` (not `kubernetes_local-`), `prometheus-`. Run `tools/list` to confirm exact names |
-| `state: null` from curl | Port-forward not running — `kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &` |
-| Restart LaunchAgent after kind restart | kind API server port changes on restart — `launchctl stop/start com.local.mcp-kubernetes-sse` |
-| `pods_top` fails with `RESOURCE_NOT_FOUND` | Metrics Server not installed, or LaunchAgent has stale kubeconfig — restart the LaunchAgent |
-| prometheus tools return 0 after Bifrost restart | Key permission cache is stale. Bifrost UI → Virtual Keys → toggle **Is this key active?** OFF for 3s, then ON. Re-test with `curl ... tools/list` |
 | Ollama `403 Model is not allowed` | Allowed Keys empty in virtual key config — select provider key explicitly in Bifrost UI |
 | Ollama `404 page not found` | Wrong provider type (`ollama` instead of `openai`) or `/v1` in base URL — remove it |
 | `qwen2.5-coder:1.5b-base` returns 400 | Base model — no chat completions support. Use `qwen2.5-coder:7b` instead |

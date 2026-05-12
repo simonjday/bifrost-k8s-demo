@@ -144,7 +144,7 @@ ollama pull gemma4:latest
 
 | Model | Size | Use case |
 |---|---|---|
-| `qwen2.5:7b` | 4.7 GB | General queries, fast |
+| qwen2.5:7b | 4.7 GB | General queries, fast |
 | `qwen2.5-coder:7b` | 4.7 GB | Code generation and review |
 | `qwen3-coder:30b` | 18.6 GB | Complex code tasks, highest local quality |
 | `llama3.2:3b` | 2.0 GB | Very fast, simple queries |

@@ -1,434 +1,254 @@
-# Prometheus & Grafana — Bifrost Metrics Setup
+# Observability: Prometheus + Grafana + Bifrost Metrics
 
-How Bifrost metrics are scraped by Prometheus and visualised in Grafana in the `kind-devops-lab` cluster. Covers the ServiceMonitor, verifying scraping is working, and importing the two provided Grafana dashboards.
-
----
+Complete setup for monitoring Bifrost metrics in Prometheus and visualizing in Grafana.
 
 ## Architecture
 
 ```
-Bifrost StatefulSet (ai-gateway)
-  └── /metrics endpoint on port 8080 (http)
-        └── ServiceMonitor (monitoring/bifrost)
-              └── Prometheus (kube-prometheus-stack)
-                    ├── PrometheusRule (monitoring/bifrost-alerts) → Alertmanager
-                    └── Grafana datasource → Grafana dashboards
+Bifrost Pod (10.244.1.21:8080)
+  ↓ /metrics endpoint
+Prometheus ServiceMonitor (ai-gateway/bifrost)
+  ↓ Scrape every 15s
+Prometheus (monitoring/prometheus)
+  ↓ Query & store
+Grafana (monitoring/grafana)
+  ↓ Dashboards & alerts
 ```
-
-Prometheus is deployed via the `kube-prometheus-stack` Helm chart in the `monitoring` namespace. Bifrost exposes a Prometheus-compatible `/metrics` endpoint on its existing `http` port (8080). A `ServiceMonitor` resource tells Prometheus where to scrape.
-
----
 
 ## Prerequisites
 
-- `kube-prometheus-stack` installed in the `monitoring` namespace (already present in this cluster, Helm release `kube-prometheus-stack`)
-- Bifrost StatefulSet running in `ai-gateway` namespace — see [README.md](../README.md) for setup
-- `kubectl` context set to `kind-devops-lab`
-- **Telemetry plugin enabled in Bifrost config** — see Step 0 below
+- kube-prometheus-stack deployed in `monitoring` namespace
+- Bifrost deployed in `ai-gateway` namespace with running metrics endpoint
 
----
-
-## Step 0 — Enable the Telemetry Plugin
-
-Bifrost v1.5.0 requires the telemetry plugin to be explicitly enabled in `config.json` for the `/metrics` endpoint to emit bifrost-specific metrics. Without this, the endpoint returns only Go runtime metrics and `bifrost_upstream_requests_total` will never appear.
-
-The `bifrost-config` ConfigMap must include a `plugins` array:
-
-```json
-{
-  "plugins": [
-    {
-      "name": "telemetry",
-      "enabled": true
-    }
-  ]
-}
-```
-
-Apply the updated ConfigMap (see `manifests/bifrost-config.json`) and restart:
+## Step 1: Verify Bifrost Metrics Endpoint
 
 ```bash
-kubectl create configmap bifrost-config \
-  --from-file=config.json=manifests/bifrost-config.json \
-  -n ai-gateway \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl rollout restart statefulset/bifrost -n ai-gateway
+kubectl -n ai-gateway exec bifrost-0 -- wget -qO- http://localhost:8080/metrics | head -20
 ```
 
-Confirm it loaded in the pod logs:
+Expected: Metrics like `bifrost_success_requests_total`, `bifrost_error_requests_total`, etc.
 
-```bash
-kubectl logs -n ai-gateway statefulset/bifrost --tail=20 | grep "plugin status"
-# Expected: plugin status: telemetry - active
-```
+## Step 2: Create ServiceMonitor
 
-> **Note:** This is already applied in the cluster. If rebuilding from scratch, run the above before applying the ServiceMonitor — otherwise Prometheus will scrape an empty metrics endpoint with no bifrost counters.
-
----
-
-## Step 1 — Apply the ServiceMonitor
-
-The ServiceMonitor lives in the `monitoring` namespace (where Prometheus can discover it via its `release: kube-prometheus-stack` label selector) and targets the `ai-gateway` namespace.
+**CRITICAL:** The selector must match **service labels**, not pod labels.
 
 ```yaml
-# manifests/bifrost-servicemonitor.yaml
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: bifrost
-  namespace: monitoring
+  namespace: ai-gateway
   labels:
-    release: kube-prometheus-stack      # must match Prometheus operator label selector
+    app: bifrost
+    release: kube-prometheus-stack
 spec:
-  namespaceSelector:
-    matchNames:
-      - ai-gateway
   selector:
     matchLabels:
-      app.kubernetes.io/instance: bifrost
       app.kubernetes.io/name: bifrost
   endpoints:
-    - port: http
-      path: /metrics
-      interval: 15s
+  - port: http
+    interval: 15s
+    path: /metrics
+    scheme: http
 ```
 
-Apply it:
+Apply:
 
 ```bash
 kubectl apply -f manifests/bifrost-servicemonitor.yaml
 ```
 
-> **Note:** This ServiceMonitor is already applied in the cluster. If you're rebuilding the cluster from scratch, run the apply command above. The `bifrost-alerts.yaml` PrometheusRule is applied the same way — see the [Alert Rules](#alert-rules) section.
+## Step 3: Verify Prometheus Discovers Target
 
----
+ServiceMonitor is discovered automatically by the Prometheus operator.
 
-## Step 2 — Verify Prometheus is scraping Bifrost
+### Check operator logs for ServiceMonitor reconciliation
+
+```bash
+kubectl -n monitoring logs -l app.kubernetes.io/name=kube-prometheus-stack-operator --tail=20 | grep bifrost
+```
+
+Expected: `config=serviceMonitor/ai-gateway/bifrost/0`
+
+### Check Prometheus active targets
+
+```bash
+curl -s 'http://localhost:9090/api/v1/targets' | \
+  jq '.data.activeTargets[] | select(.labels.job=="bifrost")'
+```
+
+Expected:
+```json
+{
+  "discoveredLabels": {
+    "__address__": "10.244.1.21:8080",
+    "__meta_kubernetes_service_name": "bifrost",
+    "__metrics_path__": "/metrics",
+    ...
+  },
+  "labels": {
+    "instance": "10.244.1.21:8080",
+    "job": "bifrost",
+    "namespace": "ai-gateway",
+    "pod": "bifrost-0",
+    "service": "bifrost"
+  },
+  "scrapeUrl": "http://10.244.1.21:8080/metrics",
+  "health": "up",
+  ...
+}
+```
+
+**Key fields:**
+- `"health": "up"` — Prometheus is successfully scraping
+- `"instance": "10.244.1.21:8080"` — Pod IP + metrics port
+- `"job": "bifrost"` — ServiceMonitor name
+
+### If target not appearing, restart Prometheus
+
+```bash
+kubectl -n monitoring delete pod prometheus-kube-prometheus-stack-prometheus-0
+kubectl -n monitoring rollout status statefulset prometheus-kube-prometheus-stack-prometheus --timeout=60s
+```
+
+Wait 30s, then recheck targets.
+
+## Step 4: Query Bifrost Metrics in Prometheus
 
 Port-forward Prometheus:
 
 ```bash
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090 &
 ```
 
-Then check the targets page at `http://localhost:9090/targets` — look for a `bifrost` job with state `UP`.
+Open http://localhost:9090 → **Graph** tab.
 
-Or check via the API:
+### Query examples
 
-```bash
-curl -s http://localhost:9090/api/v1/targets | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-targets = [t for t in d['data']['activeTargets'] if 'bifrost' in str(t.get('labels', {}))]
-for t in targets:
-    print('job:', t['labels'].get('job'), '| health:', t['health'], '| endpoint:', t['scrapeUrl'])
-"
-```
-
-Expected output:
-```
-job: bifrost | health: up | endpoint: http://10.x.x.x:8080/metrics
-```
-
-Spot-check a metric is present:
-
-```bash
-curl -s http://localhost:9090/api/v1/query?query=bifrost_upstream_requests_total \
-  | python3 -m json.tool | head -30
-```
-
----
-
-## Step 3 — Port-forward Grafana
-
-```bash
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
-```
-
-Open `http://localhost:3000`. Default credentials are `admin` / `prom-operator` (set during kube-prometheus-stack install).
-
----
-
-## Step 4 — Verify the Prometheus datasource
-
-In Grafana → **Connections → Data sources** → confirm a datasource named `prometheus` exists and its UID is `prometheus`. Both dashboard JSONs reference `uid: "prometheus"` — if your datasource UID differs, update the `datasource.uid` fields in the JSON files before importing.
-
----
-
-## Step 5 — Import the Grafana dashboards
-
-Two dashboard JSON files are provided in `grafana-dashboards/`:
-
-| File | Title | Best for |
-|---|---|---|
-| `bifrost-grafana-dashboard.json` | Bifrost AI Gateway | Quick overview — request rate, p95 latency, provider split, virtual key usage |
-| `advanced-bifrost-grafana-dashboard.json` | Enhanced Bifrost AI Gateway Dashboard | Deep-dive — p95/p99/avg latency, success rate %, token throughput, retry activity, namespace + provider filter vars |
-
-### Import steps
-
-1. In Grafana → **Dashboards → Import**
-2. Click **Upload dashboard JSON file**
-3. Select `grafana-dashboards/bifrost-grafana-dashboard.json`
-4. Set the Prometheus datasource to `prometheus` if prompted
-5. Click **Import**
-6. Repeat for `advanced-bifrost-grafana-dashboard.json`
-
-Or import via the Grafana API:
-
-```bash
-# Set your Grafana API key or use basic auth
-GRAFANA_URL="http://localhost:3000"
-GRAFANA_AUTH="admin:prom-operator"
-
-for f in grafana-dashboards/*.json; do
-  echo "Importing $f..."
-  curl -s -X POST \
-    -H "Content-Type: application/json" \
-    -u "$GRAFANA_AUTH" \
-    -d "{\"dashboard\": $(cat $f), \"overwrite\": true, \"folderId\": 0}" \
-    "$GRAFANA_URL/api/dashboards/import" | python3 -m json.tool
-done
-```
-
----
-
-## Dashboard Reference
-
-### Bifrost AI Gateway (basic)
-
-| Panel | Type | What it shows |
-|---|---|---|
-| Total Requests | Stat | Cumulative `bifrost_upstream_requests_total` |
-| Successful Requests | Stat | Cumulative `bifrost_success_requests_total` |
-| Input Tokens | Stat | Cumulative `bifrost_input_tokens_total` |
-| Output Tokens | Stat | Cumulative `bifrost_output_tokens_total` |
-| Request Rate | Time series | `rate(bifrost_upstream_requests_total[1m])` in req/s |
-| P95 Latency | Time series | `histogram_quantile(0.95, ...)` in seconds |
-| Requests by Provider | Pie chart | Split by `provider` label |
-| Requests by Virtual Key | Bar gauge | Split by `virtual_key_name` label |
-| Raw Metrics | Table | Instant snapshot of all label combinations |
-
-Default time range: last 1 hour. Refresh: 10s.
-
-### Enhanced Bifrost AI Gateway Dashboard (advanced)
-
-Adds on top of the basic dashboard:
-
-| Panel | Type | What it shows |
-|---|---|---|
-| Success Rate % | Time series | `(success / total) * 100` — spot provider errors immediately |
-| P95 vs P99 Latency | Time series | p95, p99, and average on one chart |
-| Requests by Pod | Bar gauge | Per-pod breakdown — useful when scaled to >1 replica |
-| Token Throughput | Time series | Input and output tokens/sec over time |
-| Requests by Provider Over Time | Time series | Provider traffic share over the selected window |
-| Retry Activity | Table | Requests with `number_of_retries != 0` grouped by provider |
-
-Template variables: `namespace` and `provider` — both multi-select with All option. Default time range: last 6 hours.
-
----
-
-## Key Metrics Reference
-
-| Metric | Type | Labels | Description |
-|---|---|---|---|
-| `bifrost_upstream_requests_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace`, `number_of_retries` | Every upstream request |
-| `bifrost_success_requests_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace` | Successful requests only |
-| `bifrost_error_requests_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace`, `status_code` | Failed requests only |
-| `bifrost_input_tokens_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace` | Input tokens consumed |
-| `bifrost_output_tokens_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace` | Output tokens generated |
-| `bifrost_cost_total` | Counter | `provider`, `virtual_key_name`, `pod`, `namespace` | Accumulated cost (USD) |
-| `bifrost_upstream_latency_seconds` | Histogram | `provider`, `virtual_key_name`, `pod`, `namespace`, `le` | End-to-end upstream latency |
-| `bifrost_stream_first_token_latency_seconds` | Histogram | `provider`, `virtual_key_name`, `pod`, `namespace`, `le` | Time to first token (streaming) |
-| `bifrost_stream_inter_token_latency_seconds` | Histogram | `provider`, `virtual_key_name`, `pod`, `namespace`, `le` | Inter-token latency (streaming) |
-
----
-
-## Useful PromQL Queries
-
+**Success rate (%):**
 ```promql
-# Overall error rate
-1 - (sum(rate(bifrost_success_requests_total[5m])) / sum(rate(bifrost_upstream_requests_total[5m])))
-
-# P99 latency per provider
-histogram_quantile(0.99,
-  sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (provider, le)
-)
-
-# Token throughput (total tokens/sec)
-sum(rate(bifrost_input_tokens_total[1m])) + sum(rate(bifrost_output_tokens_total[1m]))
-
-# Requests per virtual key (rate)
-sum(rate(bifrost_upstream_requests_total[5m])) by (virtual_key_name)
-
-# Retry rate
-sum(rate(bifrost_upstream_requests_total{number_of_retries!="0"}[5m]))
-  / sum(rate(bifrost_upstream_requests_total[5m]))
+(rate(bifrost_success_requests_total[5m]) / 
+  (rate(bifrost_success_requests_total[5m]) + 
+   rate(bifrost_error_requests_total[5m]))) * 100
 ```
 
----
+**Error rate by status code:**
+```promql
+rate(bifrost_error_requests_total[5m]) by (status_code)
+```
 
-## Alert Rules
+**Tokens per second:**
+```promql
+rate(bifrost_input_tokens_total[1m]) + rate(bifrost_output_tokens_total[1m])
+```
 
-A `PrometheusRule` resource is deployed in the `monitoring` namespace with 6 alerts covering errors, latency, token burn, and cost. The manifest is at `manifests/bifrost-alerts.yaml`.
+**Top models by request count:**
+```promql
+topk(5, rate(bifrost_success_requests_total[5m])) by (model)
+```
 
-> **Note:** This PrometheusRule is already applied in the cluster. If rebuilding from scratch, run `kubectl apply -f manifests/bifrost-alerts.yaml`.
+## Step 5: Build Grafana Dashboard
 
-### Deployed Alerts
+Port-forward Grafana:
 
-| Alert | Severity | Condition | For |
-|---|---|---|---|
-| `BifrostHighErrorRate` | critical | > 5 errors/sec | 5m |
-| `BifrostLowSuccessRate` | critical | success rate < 90% | 5m |
-| `BifrostHighLatencyP99` | warning | p99 upstream latency > 30s | 5m |
-| `BifrostHighStreamFirstTokenLatency` | warning | p99 TTFT > 15s | 5m |
-| `BifrostHighTokenBurnRate` | warning | > 1000 tokens/sec combined | 5m |
-| `BifrostHighCostRate` | warning | projected spend > $1/hr | 10m |
+```bash
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80 &
+# Default: admin / prom-operator
+```
 
-### Manifest
+### Add Prometheus Data Source
+
+1. **Configuration** → **Data Sources** → **Add data source**
+2. **Prometheus**
+3. **URL:** `http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090`
+4. **Save & Test**
+
+### Create Dashboard
+
+1. **+ Create** → **Dashboard**
+2. Add panels for success rate, error rates, tokens/sec, model usage
+
+## Step 6: Create PrometheusRule (Alerts)
 
 ```yaml
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: bifrost-alerts
-  namespace: monitoring
+  namespace: ai-gateway
   labels:
     release: kube-prometheus-stack
-    app: kube-prometheus-stack
 spec:
   groups:
-    - name: bifrost.rules
-      interval: 30s
-      rules:
-        - alert: BifrostHighErrorRate
-          expr: sum(rate(bifrost_error_requests_total[5m])) > 5
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: High Bifrost error rate
-            description: "Bifrost error rate is {{ $value | humanize }} errors/sec over the last 5 minutes"
+  - name: bifrost.rules
+    interval: 30s
+    rules:
+    - alert: BifrostHighErrorRate
+      expr: |
+        (rate(bifrost_error_requests_total[5m]) / 
+         (rate(bifrost_success_requests_total[5m]) + rate(bifrost_error_requests_total[5m]))) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Bifrost error rate >5%"
 
-        - alert: BifrostLowSuccessRate
-          expr: |
-            sum(rate(bifrost_success_requests_total[5m])) /
-            sum(rate(bifrost_upstream_requests_total[5m])) < 0.9
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: Bifrost success rate below 90%
-            description: "Success rate is {{ $value | humanizePercentage }} over the last 5 minutes"
-
-        - alert: BifrostHighLatencyP99
-          expr: histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model)) > 10
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: Bifrost upstream p99 latency is high
-            description: "p99 latency for {{ $labels.provider }}/{{ $labels.model }} is {{ $value | humanizeDuration }}"
-
-        - alert: BifrostHighStreamFirstTokenLatency
-          expr: histogram_quantile(0.99, sum(rate(bifrost_stream_first_token_latency_seconds_bucket[5m])) by (le, provider, model)) > 5
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: Bifrost time-to-first-token p99 is high
-            description: "TTFT p99 for {{ $labels.provider }}/{{ $labels.model }} is {{ $value | humanizeDuration }}"
-
-        - alert: BifrostHighTokenBurnRate
-          expr: sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m])) > 1000
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: Bifrost token consumption rate is high
-            description: "Token burn rate is {{ $value | humanize }} tokens/sec — check for runaway requests"
-
-        - alert: BifrostHighCostRate
-          expr: sum(rate(bifrost_cost_total[1h])) * 3600 > 1
-          for: 10m
-          labels:
-            severity: warning
-          annotations:
-            summary: Bifrost cost accruing rapidly
-            description: "Projected hourly cost is ${{ $value | humanize }}"
+    - alert: BifrostMCPClientDisconnected
+      expr: bifrost_mcp_clients_connected == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "No MCP clients connected to Bifrost"
 ```
 
-### Verify alerts loaded
+Apply:
 
 ```bash
-curl -s http://localhost:9090/api/v1/rules \
-  | jq '.data.groups[].rules[] | select(.name | startswith("Bifrost")) | {name, state, health}'
-```
-
-### Test an alert (lower threshold to trigger)
-
-```bash
-# Lower BifrostHighErrorRate threshold to 0 to force firing
-kubectl patch prometheusrule bifrost-alerts -n monitoring --type='json' \
-  -p='[{"op":"replace","path":"/spec/groups/0/rules/0/expr","value":"sum(rate(bifrost_error_requests_total[5m])) > 0"}]'
-
-# Watch state: inactive → pending → firing (takes up to 5m due to 'for' duration)
-curl -s http://localhost:9090/api/v1/rules \
-  | jq '.data.groups[].rules[] | select(.name | startswith("Bifrost")) | {name, state}'
-
-# Restore
 kubectl apply -f manifests/bifrost-alerts.yaml
 ```
 
-### Threshold tuning
-
-| Alert | Default | Notes |
-|---|---|---|
-| `BifrostHighErrorRate` | > 5/sec | Lower for production |
-| `BifrostLowSuccessRate` | < 90% | Consider 95–99% for production |
-| `BifrostHighLatencyP99` | > 30s | Raised from 10s — Ollama on CPU regularly hits 10-15s |
-| `BifrostHighStreamFirstTokenLatency` | > 15s | Raised from 5s — Ollama on CPU TTFT is slower than cloud providers |
-| `BifrostHighTokenBurnRate` | > 1000 tok/sec | Tune to expected throughput |
-| `BifrostHighCostRate` | > $1/hr | Adjust to your budget |
-
----
-
 ## Troubleshooting
 
-**Prometheus target shows DOWN**
-- Check Bifrost pod is running: `kubectl get pods -n ai-gateway`
-- Confirm the service has the expected labels: `kubectl get svc bifrost -n ai-gateway --show-labels`
-- Check the ServiceMonitor selector matches: `kubectl get servicemonitor bifrost -n monitoring -o yaml`
+### ServiceMonitor discovered but no active targets
 
-**No data in Grafana panels**
-- Confirm the Prometheus datasource UID is `prometheus` — both dashboards hardcode this UID
-- Try running `bifrost_upstream_requests_total` directly in Grafana's Explore view to test connectivity
-- Make sure Bifrost has received at least one request (run a demo script or hit the API manually)
+**Cause:** ServiceMonitor selector doesn't match Bifrost service labels.
 
-**ServiceMonitor not picked up by Prometheus**
-- The `release: kube-prometheus-stack` label on the ServiceMonitor must match the Prometheus operator's `serviceMonitorSelector` — verify with:
-  ```bash
-  kubectl get prometheus -n monitoring -o jsonpath='{.items[0].spec.serviceMonitorSelector}'
-  ```
+Bifrost service has Helm-standard labels like `app.kubernetes.io/name: bifrost`, not `app: bifrost`.
 
----
-
-## Port-forward convenience script
-
-Both services need to be forwarded for full observability:
-
+**Fix:** Verify and update ServiceMonitor selector:
 ```bash
-#!/bin/bash
-# port-forward-observability.sh
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090 &
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80 &
-kubectl port-forward -n ai-gateway svc/bifrost 8080:8080 &
-echo "Prometheus: http://localhost:9090"
-echo "Grafana:    http://localhost:3000  (admin / prom-operator)"
-echo "Bifrost UI: http://localhost:8080"
-wait
+# Check service labels
+kubectl -n ai-gateway get svc bifrost --show-labels
+
+# Update selector to match (use provided manifests/bifrost-servicemonitor.yaml)
+kubectl apply -f manifests/bifrost-servicemonitor.yaml
+
+# Restart Prometheus to force reload
+kubectl -n monitoring delete pod prometheus-kube-prometheus-stack-prometheus-0
+sleep 30
+
+# Verify target is up
+curl -s 'http://localhost:9090/api/v1/targets' | jq '.data.activeTargets[] | select(.labels.job=="bifrost") | .health'
+# Expected: "up"
 ```
 
----
+### Prometheus operator not discovering ServiceMonitor
 
-*Related docs: [docs/README.md](README.md) · [Prometheus MCP Server — Deployment & Demo Guide.md](Prometheus%20MCP%20Server%20—%20Deployment%20%26%20Demo%20Guide.md) · [Grafana MCP Server — Deployment & Demo Guide.md](Additional-MCP-Server-Guides/Grafana%20MCP%20Server%20—%20Deployment%20%26%20Demo%20Guide.md)*
+**Check:** ServiceMonitor must have label `release: kube-prometheus-stack` to match Prometheus operator's ServiceMonitorSelector.
+
+```bash
+# Verify label
+kubectl -n ai-gateway get servicemonitor bifrost -o yaml | grep -A 2 "labels:"
+# Should show: release: kube-prometheus-stack
+```
+
+### Bifrost metrics returning zero results
+
+**Cause:** Prometheus hasn't scraped new metrics yet, or Bifrost isn't receiving traffic.
+
+**Fix:** 
+1. Generate traffic: `bash scripts/bifrost-sim.sh 50`
+2. Wait 30 seconds for Prometheus to scrape
+3. Query again: `curl -s 'http://localhost:9090/api/v1/query?query=bifrost_success_requests_total'`
+

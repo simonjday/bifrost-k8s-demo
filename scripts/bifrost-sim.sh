@@ -3,7 +3,7 @@
 # Generates synthetic traffic through Bifrost to populate Prometheus metrics
 # Usage: bash bifrost-sim.sh [num_requests]
 
-KEY="sk-bf-0b7391e8-12b3-45f7-bf83-69f6f8910115"
+KEY="sk-bf-d6373a91-f86b-42fd-8ecc-4a61aac010c2"
 BF="http://localhost:8080/v1/chat/completions"
 REQUESTS=${1:-40}
 

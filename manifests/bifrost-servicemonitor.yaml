@@ -5,11 +5,11 @@ metadata:
   namespace: ai-gateway
   labels:
     app: bifrost
-    release: prometheus
+    release: kube-prometheus-stack
 spec:
   selector:
     matchLabels:
-      app: bifrost
+      app.kubernetes.io/name: bifrost
   endpoints:
   - port: http
     interval: 15s
