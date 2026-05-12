@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Bifrost \u2014 Kubernetes MCP Demo",
-    "description": "Two-key demo: Restricted (read-only, 7 tools) vs Admin (full access). Switch keys via collection variables.",
+    "description": "Updated for cluster rebuild. Set ADMIN_KEY and RESTRICTED_KEY from Bifrost UI \u2192 Keys tab.",
     "_postman_id": "bifrost-k8s-mcp-v3",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -2049,40 +2049,7 @@
       "description": "Bifrost-specific metrics scraped from /metrics by Prometheus. Shows requests, tokens, latency and error rates per provider/model/key.",
       "item": [
         {
-          "name": "\ud83d\udcca Overview \u2014 all Bifrost metrics",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
-                  "try{",
-                  "  const body=pm.response.json();",
-                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
-                  "  let text=raw;",
-                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
-                  "  let items=[];",
-                  "  try{",
-                  "    const d=JSON.parse(text);",
-                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
-                  "  }catch(_){",
-                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
-                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
-                  "      const val=valMatch?valMatch[1]:'0';",
-                  "      const labels={};",
-                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
-                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
-                  "      return {metric:labels, value:[null,val]};",
-                  "    });",
-                  "  }",
-                  "  const rows=items.map(r=>{ const m=r.metric||{}; const name=m.__name__||''; const val=r.value[1]||''; const labels=Object.entries(m).filter(([k])=>k!=='__name__'&&k!=='job'&&k!=='instance').map(([k,v])=>`<span style='background:#1e293b;border:1px solid #334155;border-radius:3px;padding:1px 5px;font-size:10px;margin:1px;display:inline-block'>${k}=${v}</span>`).join(' '); return `<tr><td style='color:#a78bfa'>${name}</td><td>${parseFloat(val).toLocaleString()}</td><td style='font-size:11px'>${labels}</td></tr>`; }).join('');",
-                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 All Metrics</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><input type='text' placeholder='Filter...' oninput='document.querySelectorAll(\"#t tbody tr\").forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(this.value.toLowerCase())?\"\":\"none\"})'><table id='t'><thead><tr><th>Metric</th><th>Value</th><th>Labels</th></tr></thead><tbody>${rows||'<tr><td colspan=3 style=\"text-align:center;color:#475569;padding:20px\">No data</td></tr>'}</tbody></table>`);",
-                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
-                ]
-              }
-            }
-          ],
+          "name": "All Bifrost metrics (instant)",
           "request": {
             "method": "POST",
             "header": [
@@ -2103,52 +2070,23 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"{job='bifrost'}\"\n    }\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"bifrost_gateway_requests_total\"}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
+                ]
               }
             }
-          }
+          ]
         },
         {
-          "name": "\ud83d\udd22 Total requests",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
-                  "try{",
-                  "  const body=pm.response.json();",
-                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
-                  "  let text=raw;",
-                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
-                  "  let items=[];",
-                  "  try{",
-                  "    const d=JSON.parse(text);",
-                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
-                  "  }catch(_){",
-                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
-                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
-                  "      const val=valMatch?valMatch[1]:'0';",
-                  "      const labels={};",
-                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
-                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
-                  "      return {metric:labels, value:[null,val]};",
-                  "    });",
-                  "  }",
-                  "  const total=items.reduce((a,r)=>a+parseFloat(r.value[1]||0),0);",
-                  "  const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
-                  "  const rows=sorted.map(r=>{ const m=r.metric||{}; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td>${m.key_name||''}</td><td style='color:#a78bfa;font-weight:600'>${parseFloat(r.value[1]).toLocaleString()}</td></tr>`; }).join('');",
-                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 Total Requests</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='stats'><div class='stat'><p class='stat-label'>Total Requests</p><p class='stat-value' style='color:#a78bfa'>${total.toLocaleString()}</p><p class='stat-sub'>all providers</p></div></div><div class='query'>sum(bifrost_upstream_requests_total) by (provider, model, key_name)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Requests</th></tr></thead><tbody>${rows||'<tr><td colspan=4 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
-                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
-                ]
-              }
-            }
-          ],
+          "name": "Request rate by provider (5m)",
           "request": {
             "method": "POST",
             "header": [
@@ -2169,52 +2107,23 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(bifrost_upstream_requests_total) by (provider, model, key_name)\"\n    }\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"sum(rate(bifrost_gateway_requests_total[5m])) by (provider)\"}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
+                ]
               }
             }
-          }
+          ]
         },
         {
-          "name": "\u2705 Successful requests",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
-                  "try{",
-                  "  const body=pm.response.json();",
-                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
-                  "  let text=raw;",
-                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
-                  "  let items=[];",
-                  "  try{",
-                  "    const d=JSON.parse(text);",
-                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
-                  "  }catch(_){",
-                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
-                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
-                  "      const val=valMatch?valMatch[1]:'0';",
-                  "      const labels={};",
-                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
-                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
-                  "      return {metric:labels, value:[null,val]};",
-                  "    });",
-                  "  }",
-                  "  const total=items.reduce((a,r)=>a+parseFloat(r.value[1]||0),0);",
-                  "  const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
-                  "  const rows=sorted.map(r=>{ const m=r.metric||{}; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td>${m.key_name||''}</td><td style='color:#4ade80;font-weight:600'>${parseFloat(r.value[1]).toLocaleString()}</td></tr>`; }).join('');",
-                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 Successful Requests</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='stats'><div class='stat'><p class='stat-label'>Successful Requests</p><p class='stat-value' style='color:#4ade80'>${total.toLocaleString()}</p><p class='stat-sub'>all providers</p></div></div><div class='query'>sum(bifrost_success_requests_total) by (provider, model, key_name)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Successes</th></tr></thead><tbody>${rows||'<tr><td colspan=4 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
-                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
-                ]
-              }
-            }
-          ],
+          "name": "Error rate by provider (5m)",
           "request": {
             "method": "POST",
             "header": [
@@ -2235,52 +2144,23 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(bifrost_success_requests_total) by (provider, model, key_name)\"\n    }\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"sum(rate(bifrost_gateway_requests_total{status=\\\"error\\\"}[5m])) by (provider)\"}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
+                ]
               }
             }
-          }
+          ]
         },
         {
-          "name": "\ud83d\udce5 Input tokens total",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
-                  "try{",
-                  "  const body=pm.response.json();",
-                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
-                  "  let text=raw;",
-                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
-                  "  let items=[];",
-                  "  try{",
-                  "    const d=JSON.parse(text);",
-                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
-                  "  }catch(_){",
-                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
-                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
-                  "      const val=valMatch?valMatch[1]:'0';",
-                  "      const labels={};",
-                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
-                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
-                  "      return {metric:labels, value:[null,val]};",
-                  "    });",
-                  "  }",
-                  "  const total=items.reduce((a,r)=>a+parseFloat(r.value[1]||0),0);",
-                  "  const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
-                  "  const rows=sorted.map(r=>{ const m=r.metric||{}; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td>${m.key_name||''}</td><td style='color:#a78bfa;font-weight:600'>${parseFloat(r.value[1]).toLocaleString()}</td></tr>`; }).join('');",
-                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 Input Tokens</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='stats'><div class='stat'><p class='stat-label'>Total Input Tokens</p><p class='stat-value' style='color:#a78bfa'>${total.toLocaleString()}</p><p class='stat-sub'>all providers</p></div></div><div class='query'>sum(bifrost_input_tokens_total) by (provider, model, key_name)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Input Tokens</th></tr></thead><tbody>${rows||'<tr><td colspan=4 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
-                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
-                ]
-              }
-            }
-          ],
+          "name": "P95 latency by model (5m)",
           "request": {
             "method": "POST",
             "header": [
@@ -2301,52 +2181,23 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(bifrost_input_tokens_total) by (provider, model, key_name)\"\n    }\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"histogram_quantile(0.95, sum(rate(bifrost_gateway_request_duration_seconds_bucket[5m])) by (le, model))\"}}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
+                ]
               }
             }
-          }
+          ]
         },
         {
-          "name": "\ud83d\udce4 Output tokens total",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
-                  "try{",
-                  "  const body=pm.response.json();",
-                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
-                  "  let text=raw;",
-                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
-                  "  let items=[];",
-                  "  try{",
-                  "    const d=JSON.parse(text);",
-                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
-                  "  }catch(_){",
-                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
-                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
-                  "      const val=valMatch?valMatch[1]:'0';",
-                  "      const labels={};",
-                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
-                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
-                  "      return {metric:labels, value:[null,val]};",
-                  "    });",
-                  "  }",
-                  "  const total=items.reduce((a,r)=>a+parseFloat(r.value[1]||0),0);",
-                  "  const sorted=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1]));",
-                  "  const rows=sorted.map(r=>{ const m=r.metric||{}; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td>${m.key_name||''}</td><td style='color:#38bdf8;font-weight:600'>${parseFloat(r.value[1]).toLocaleString()}</td></tr>`; }).join('');",
-                  "  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost \u2014 Output Tokens</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='stats'><div class='stat'><p class='stat-label'>Total Output Tokens</p><p class='stat-value' style='color:#38bdf8'>${total.toLocaleString()}</p><p class='stat-sub'>all providers</p></div></div><div class='query'>sum(bifrost_output_tokens_total) by (provider, model, key_name)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Key</th><th>Output Tokens</th></tr></thead><tbody>${rows||'<tr><td colspan=4 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
-                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
-                ]
-              }
-            }
-          ],
+          "name": "Token throughput (5m)",
           "request": {
             "method": "POST",
             "header": [
@@ -2367,206 +2218,20 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(bifrost_output_tokens_total) by (provider, model, key_name)\"\n    }\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"sum(rate(bifrost_gateway_requests_total[5m])) by (provider, model)\"}}}"
             }
-          }
-        },
-        {
-          "name": "\u26a1 Upstream latency \u2014 p50/p95/p99",
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
-                  "try{",
-                  "  const body=pm.response.json();",
-                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
-                  "  let text=raw;",
-                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
-                  "  let items=[];",
-                  "  try{",
-                  "    const d=JSON.parse(text);",
-                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
-                  "  }catch(_){",
-                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
-                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
-                  "      const val=valMatch?valMatch[1]:'0';",
-                  "      const labels={};",
-                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
-                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
-                  "      return {metric:labels, value:[null,val]};",
-                  "    });",
-                  "  }",
-                  "  const rows=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1])).map(r=>{ const m=r.metric||{}; const v=parseFloat(r.value[1]); const cls=v>2?'color:#f87171':v>0.5?'color:#fbbf24':'color:#4ade80'; return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td style='font-weight:600;${cls}'>${isNaN(v)?'no data':(v*1000).toFixed(0)+'ms'}</td></tr>`; }).join('');",
-                  "  pm.visualizer.set(`<style>${styles}</style><h2>Upstream Latency \u2014 p99</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='query'>histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model))</div><table><thead><tr><th>Provider</th><th>Model</th><th>p99 Latency</th></tr></thead><tbody>${rows||'<tr><td colspan=3 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
-                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
+                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Api-Key",
-                "value": "{{ADMIN_KEY}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BF}}",
-              "host": [
-                "{{BF}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model))\"\n    }\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "\ud83d\udcc8 Request rate (5m)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
-                  "try{",
-                  "  const body=pm.response.json();",
-                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
-                  "  let text=raw;",
-                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
-                  "  let items=[];",
-                  "  try{",
-                  "    const d=JSON.parse(text);",
-                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
-                  "  }catch(_){",
-                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
-                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
-                  "      const val=valMatch?valMatch[1]:'0';",
-                  "      const labels={};",
-                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
-                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
-                  "      return {metric:labels, value:[null,val]};",
-                  "    });",
-                  "  }",
-                  "  const rows=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1])).map(r=>{ const m=r.metric||{}; const v=parseFloat(r.value[1]); return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td style='color:#a78bfa;font-weight:600'>${v.toFixed(4)} req/s</td></tr>`; }).join('');",
-                  "  pm.visualizer.set(`<style>${styles}</style><h2>Request Rate (5m avg)</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='query'>sum(rate(bifrost_upstream_requests_total[5m])) by (provider, model)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Rate</th></tr></thead><tbody>${rows||'<tr><td colspan=3 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
-                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Api-Key",
-                "value": "{{ADMIN_KEY}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BF}}",
-              "host": [
-                "{{BF}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(rate(bifrost_upstream_requests_total[5m])) by (provider, model)\"\n    }\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "\ud83d\udd01 Token rate (5m)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#a78bfa;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}.stat{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}.stat-label{color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin:0 0 4px}.stat-value{font-size:24px;font-weight:700;margin:0}.stat-sub{color:#475569;font-size:11px;margin:4px 0 0}.query{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#a5f3fc;margin-bottom:12px}.err{color:#f87171}input{width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#e2e8f0;font-size:12px;margin-bottom:12px}`;",
-                  "try{",
-                  "  const body=pm.response.json();",
-                  "  const raw=body.result&&body.result.content?body.result.content[0].text:'';",
-                  "  let text=raw;",
-                  "  try{ const outer=JSON.parse(raw); if(outer.result!==undefined) text=outer.result; }catch(_){}",
-                  "  let items=[];",
-                  "  try{",
-                  "    const d=JSON.parse(text);",
-                  "    items=(d&&d.data&&d.data.result)?d.data.result:(Array.isArray(d)?d:[]);",
-                  "  }catch(_){",
-                  "    items=text.trim().split('\\n').filter(Boolean).map(l=>{",
-                  "      const valMatch=l.match(/=> ([\\d.]+(?:e[+-]?\\d+)?) @/);",
-                  "      const val=valMatch?valMatch[1]:'0';",
-                  "      const labels={};",
-                  "      const labelStr=l.match(/\\{([^}]*)\\}/);",
-                  "      if(labelStr){ labelStr[1].split(', ').forEach(p=>{ const eq=p.indexOf('='); if(eq>0){ const k=p.substring(0,eq).trim(); const v=p.substring(eq+1).replace(/^\\\\\\\"|\\\\\\\"$/g,'').replace(/^\"|\"$/g,''); labels[k]=v; } }); }",
-                  "      return {metric:labels, value:[null,val]};",
-                  "    });",
-                  "  }",
-                  "  const rows=items.sort((a,b)=>parseFloat(b.value[1])-parseFloat(a.value[1])).map(r=>{ const m=r.metric||{}; const v=parseFloat(r.value[1]); return `<tr><td>${m.provider||''}</td><td>${m.model||''}</td><td style='color:#38bdf8;font-weight:600'>${v.toFixed(2)} tok/s</td></tr>`; }).join('');",
-                  "  pm.visualizer.set(`<style>${styles}</style><h2>Token Rate (5m avg)</h2><p class='sub'>\ud83d\udd2e Bifrost via Prometheus</p><div class='query'>sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m])) by (provider, model)</div><table><thead><tr><th>Provider</th><th>Model</th><th>Tokens/s</th></tr></thead><tbody>${rows||'<tr><td colspan=3 style=\"text-align:center;color:#475569;padding:20px\">No data yet</td></tr>'}</tbody></table>`);",
-                  "} catch(e){ pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p><pre style='background:#1e293b;padding:12px;border-radius:8px;color:#a5f3fc;font-size:11px;white-space:pre-wrap'>${pm.response.text().substring(0,500)}</pre>`); }"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Api-Key",
-                "value": "{{ADMIN_KEY}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BF}}",
-              "host": [
-                "{{BF}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prometheus-query\",\n    \"arguments\": {\n      \"query\": \"sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m])) by (provider, model)\"\n    }\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
+          ]
         }
       ]
     }

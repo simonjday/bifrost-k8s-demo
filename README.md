@@ -103,19 +103,23 @@ curl -s -X POST http://localhost:8080/mcp \
 # Expected: new_kubernetes_local: 20, prometheus: 28
 ```
 
-After running the install script, register both MCP servers manually in the Bifrost UI:
+After running the install script, both MCP servers are configured. Verify they're connected:
 
-**Kubernetes MCP:**
-- **MCP Gateway → New MCP Server → Name:** `new_kubernetes_local`
-- **Type:** Server-Sent Events (SSE)
-- **URL:** `http://192.168.1.21:8811/sse`
+```bash
+curl -s http://localhost:8080/api/mcp/clients | jq '.clients[] | {name, state, tool_count: (.tools | length)}'
+# Expected: 2 clients, both "connected", 20 + 28 tools
+```
 
-**Prometheus MCP:**
-- **MCP Gateway → New MCP Server → Name:** `prometheus`
-- **Type:** HTTP (Streamable)
-- **URL:** `http://prometheus-mcp.monitoring.svc.cluster.local:8080/mcp`
+**MCP Server Details:**
 
-> After creating each server, go to **Virtual Keys** and explicitly grant access to the server for each key that needs it.
+| Server | Type | URL | Tools | Notes |
+|---|---|---|---|---|
+| `kubernetes-local` | SSE | `http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse` | 20 | Via socat proxy in-cluster to Mac (192.168.1.21:8811) |
+| `prometheus` | HTTP (Streamable) | `http://prometheus-mcp.monitoring.svc.cluster.local:8080/mcp` | 28 | In-cluster service, scrapes Prometheus API |
+
+> **Kubernetes MCP Networking:** The `mcp-kubernetes-proxy` Deployment (socat) forwards requests from in-cluster DNS to the Mac LaunchAgent. This allows Bifrost to reach the Mac MCP server without exposing it to the network.
+
+> After setup, go to **Bifrost UI → Virtual Keys** and explicitly grant access to each MCP server for each key that needs it.
 
 ---
 
@@ -163,20 +167,27 @@ flowchart LR
 ```
 Mac Host
 ├── Ollama (0.0.0.0:11434)
-├── kubernetes-mcp-server SSE (0.0.0.0:8811)
-│   └── macOS LaunchAgent (auto-start/restart on login)
+├── kubernetes-mcp-server LaunchAgent (:8811)
 │
-└── kind cluster (Docker Desktop)
-    └── ai-gateway namespace
-        ├── bifrost-0 → localhost:8080 (port-forward)
-        │   └── openai provider → 192.168.1.21:11434
-        │   └── new_kubernetes_local SSE → 192.168.1.21:8811
-        └── monitoring namespace
-            ├── kube-prometheus-stack
-            └── prometheus-mcp → http (streamable) → Prometheus API
+└── Docker Desktop / kind cluster
+    ├── ai-gateway namespace
+    │   ├── bifrost-0 (:8080)
+    │   │   ├── → Ollama: 192.168.1.21:11434
+    │   │   ├── → Kubernetes MCP: http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/sse
+    │   │   └── → Prometheus: http://prometheus-mcp.monitoring.svc.cluster.local:8080/mcp
+    │   └── mcp-kubernetes-proxy (socat) 
+    │       └── Forwards to Mac: 192.168.1.21:8811
+    │
+    └── monitoring namespace
+        ├── kube-prometheus-stack (Prometheus + Grafana)
+        └── prometheus-mcp (:8080)
+            └── Wraps prometheus-mcp-server, makes Prometheus API available as MCP tools
 ```
 
-The Mac's LAN IP (`192.168.1.21`) is directly reachable from kind pods via Docker Desktop network bridging — no proxy pod required.
+**Key networking details:**
+- **Socat proxy:** Bifrost reaches Mac MCP server via DNS (`mcp-kubernetes-sse.svc`) → socat pod → Mac IP (192.168.1.21:8811)
+- **Ollama:** Direct route from kind to Mac via Docker Desktop bridge (192.168.1.21:11434)
+- **Prometheus MCP:** In-cluster service in `monitoring` namespace, no external routing needed
 
 ### Prometheus Metrics Flow
 
@@ -390,18 +401,24 @@ curl -s -X POST http://localhost:8080/mcp \
 
 | Issue | Fix |
 |---|---|
-| Tool not found | Use `new_kubernetes_local-` prefix — not `kubernetes_local-`. Run `tools/list` to confirm exact names |
+| `install.sh` fails: "command not found: kubectl --context kind-devops-lab" | Use fixed version from repo — kubectl_cmd() function replaces string variable. Handles word-splitting in conditionals properly |
+| Helm release stuck: "cannot reuse a name that is still in use" | `helm uninstall bifrost -n ai-gateway` before re-running install script |
+| Prometheus MCP `listen tcp :8080: bind: address already in use` | Manifest args are malformed. Must use `command: ["node"]` entry point with proper args array (no shell string). See manifests/prometheus-mcp.yaml |
+| Prometheus MCP pod stuck initializing | Supergateway expects stateless HTTP transport. Ensure deployment uses `--outputTransport streamableHttp` and `--web.listen-address=:0` (random port for Prometheus binary) |
+| prometheus tools return 0 after Bifrost restart | Key permission cache is stale. Bifrost UI → Virtual Keys → toggle **Is this key active?** OFF for 3s, then ON |
+| Bifrost can't reach MCP servers in-cluster | Test from Bifrost pod: `kubectl -n ai-gateway exec bifrost-0 -- wget -v http://mcp-kubernetes-sse.ai-gateway.svc.cluster.local:8811/healthz`. Verify socat proxy is running: `kubectl -n ai-gateway get pods -l app=mcp-kubernetes-proxy` |
+| MCP clients show as `null` name in Bifrost | They're still functional; name field is for UI labels. Explicitly set server names in Bifrost config JSON if desired |
+| Tool not found | Use correct prefix: `new_kubernetes_local-` (not `kubernetes_local-`), `prometheus-`. Run `tools/list` to confirm exact names |
 | `state: null` from curl | Port-forward not running — `kubectl -n ai-gateway port-forward svc/bifrost 8080:8080 &` |
 | Restart LaunchAgent after kind restart | kind API server port changes on restart — `launchctl stop/start com.local.mcp-kubernetes-sse` |
 | `pods_top` fails with `RESOURCE_NOT_FOUND` | Metrics Server not installed, or LaunchAgent has stale kubeconfig — restart the LaunchAgent |
-| prometheus tools return 0 in tools/list | Server disconnected or virtual key missing access — reconnect in Bifrost UI; grant key access |
-| prometheus-mcp CrashLoopBackOff | Child process exited — shell loop missing from deployment args. See Prometheus MCP guide |
+| prometheus tools return 0 after Bifrost restart | Key permission cache is stale. Bifrost UI → Virtual Keys → toggle **Is this key active?** OFF for 3s, then ON. Re-test with `curl ... tools/list` |
 | Ollama `403 Model is not allowed` | Allowed Keys empty in virtual key config — select provider key explicitly in Bifrost UI |
 | Ollama `404 page not found` | Wrong provider type (`ollama` instead of `openai`) or `/v1` in base URL — remove it |
 | `qwen2.5-coder:1.5b-base` returns 400 | Base model — no chat completions support. Use `qwen2.5-coder:7b` instead |
 | Open WebUI shows no models | `OPENAI_API_BASE_URL` must point at Bifrost (`:8080`), not Ollama (`:11434`) |
 | Anthropic `429 rate_limit_error` | Tool schemas consume large token budget — use `claude-haiku-4-5-20251001` for MCP tool flows |
-| Agent mode not executing tools | Set **Tools to Auto Execute: `*`** in Bifrost UI → MCP → `new_kubernetes_local` → Edit |
+| Agent mode not executing tools | Set **Tools to Auto Execute: `*`** in Bifrost UI → MCP → `kubernetes-local` → Edit |
 
 ---
 
@@ -432,15 +449,19 @@ curl -s -X POST http://localhost:8080/mcp \
 
 | Component | Version / Detail |
 |---|---|
-| Bifrost | v1.5.0-prerelease7 |
+| Bifrost | v1.5.0 |
+| install.sh | kubectl_cmd() function, auto-config MCP servers |
 | kubernetes-mcp-server | latest (macOS LaunchAgent, port 8811) |
-| prometheus-mcp-server | v0.18.0 (tjhop/prometheus-mcp-server) |
-| kind cluster | kind-devops-lab, k8s v1.33.x |
+| prometheus-mcp-server | v0.18.0 (ghcr.io/tjhop/prometheus-mcp-server) with HTTP transport |
+| Kubernetes | v1.33.x (kind-devops-lab) |
 | Docker Desktop | Mac (LAN IP: 192.168.1.21) |
+| kube-prometheus-stack | latest (Helm, Prometheus + Grafana) |
+| Metrics Server | installed by install.sh, required for pods_top |
+| ServiceMonitor | bifrost (15s interval, scrapes :8080/metrics) |
+| PrometheusRule | bifrost (5 alert rules for gateway health) |
 | Ollama models | qwen2.5:7b, qwen3-coder:30b, llama3.2:3b, qwen2.5-coder:7b, gemma4:latest |
 | Anthropic models | claude-haiku-4-5-20251001, claude-sonnet-4-5-20250929 |
 | Open WebUI | latest (ghcr.io/open-webui/open-webui:main) |
-| kube-prometheus-stack | latest (Helm) |
 
 ---
 
@@ -448,6 +469,8 @@ curl -s -X POST http://localhost:8080/mcp \
 
 | Doc | Purpose |
 |---|---|
+| [docs/bifrost-mcp-rebuild-guide.md](docs/bifrost-mcp-rebuild-guide.md) | **[NEW]** Step-by-step guide for full cluster rebuild, Bifrost install, observability, and MCP setup |
+| [docs/bifrost-mcp-quickref.md](docs/bifrost-mcp-quickref.md) | **[NEW]** Quick reference, health checks, troubleshooting, and common debugging commands |
 | [docs/demo-guide.md](docs/demo-guide.md) | Primary demo playbook — 11 demos |
 | [docs/Prometheus MCP Server — Deployment & Demo Guide.md](docs/Prometheus%20MCP%20Server%20—%20Deployment%20%26%20Demo%20Guide.md) | Prometheus MCP setup, ServiceMonitor, Postman collection |
 | [docs/ollama-bifrost-setup.md](docs/ollama-bifrost-setup.md) | Ollama config, model management, Claude Desktop integration |

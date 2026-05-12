@@ -1,68 +1,63 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: bifrost-alerts
-  namespace: monitoring
+  name: bifrost
+  namespace: ai-gateway
   labels:
-    release: kube-prometheus-stack
-    app: kube-prometheus-stack
+    app: bifrost
+    prometheus: kube-prometheus
 spec:
   groups:
-    - name: bifrost.rules
-      interval: 30s
-      rules:
-        - alert: BifrostHighErrorRate
-          expr: sum(rate(bifrost_error_requests_total[5m])) > 5
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: High Bifrost error rate
-            description: "Bifrost error rate is {{ $value | humanize }} errors/sec over the last 5 minutes"
+  - name: bifrost.rules
+    interval: 30s
+    rules:
+    - alert: BifrostHighErrorRate
+      expr: |
+        (sum(rate(bifrost_gateway_requests_total{status=~"5.."}[5m])) by (instance) / 
+         sum(rate(bifrost_gateway_requests_total[5m])) by (instance)) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Bifrost high error rate ({{ $value | humanizePercentage }})"
+        description: "Bifrost {{ $labels.instance }} has error rate > 5% for 5m"
 
-        - alert: BifrostLowSuccessRate
-          expr: |
-            sum(rate(bifrost_success_requests_total[5m])) /
-            sum(rate(bifrost_upstream_requests_total[5m])) < 0.9
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: Bifrost success rate below 90%
-            description: "Success rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+    - alert: BifrostHighLatency
+      expr: |
+        histogram_quantile(0.95, sum(rate(bifrost_gateway_request_duration_seconds_bucket[5m])) by (le, instance)) > 1.0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Bifrost high p95 latency ({{ $value }}s)"
+        description: "Bifrost {{ $labels.instance }} p95 latency > 1s for 5m"
 
-        - alert: BifrostHighLatencyP99
-          expr: histogram_quantile(0.99, sum(rate(bifrost_upstream_latency_seconds_bucket[5m])) by (le, provider, model)) > 30
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: Bifrost upstream p99 latency is high
-            description: "p99 latency for {{ $labels.provider }}/{{ $labels.model }} is {{ $value | humanizeDuration }}"
+    - alert: BifrostPodCrashing
+      expr: |
+        rate(bifrost_container_last_seen{pod=~"bifrost-.*"}[5m]) > 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Bifrost pod {{ $labels.pod }} is crashing"
+        description: "Bifrost pod {{ $labels.pod }} has restarted recently"
 
-        - alert: BifrostHighStreamFirstTokenLatency
-          expr: histogram_quantile(0.99, sum(rate(bifrost_stream_first_token_latency_seconds_bucket[5m])) by (le, provider, model)) > 15
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: Bifrost time-to-first-token p99 is high
-            description: "TTFT p99 for {{ $labels.provider }}/{{ $labels.model }} is {{ $value | humanizeDuration }}"
+    - alert: BifrostMCPClientDisconnected
+      expr: |
+        bifrost_mcp_client_connected < 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Bifrost MCP client disconnected"
+        description: "Bifrost has no active MCP client connections for 5m"
 
-        - alert: BifrostHighTokenBurnRate
-          expr: sum(rate(bifrost_input_tokens_total[5m]) + rate(bifrost_output_tokens_total[5m])) > 1000
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: Bifrost token consumption rate is high
-            description: "Token burn rate is {{ $value | humanize }} tokens/sec — check for runaway requests"
-
-        - alert: BifrostHighCostRate
-          expr: sum(rate(bifrost_cost_total[1h])) * 3600 > 1
-          for: 10m
-          labels:
-            severity: warning
-          annotations:
-            summary: Bifrost cost accruing rapidly
-            description: "Projected hourly cost is ${{ $value | humanize }}"
+    - alert: BifrostMemoryUsageHigh
+      expr: |
+        container_memory_usage_bytes{pod=~"bifrost-.*"} / container_spec_memory_limit_bytes{pod=~"bifrost-.*"} > 0.85
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Bifrost memory usage high ({{ $value | humanizePercentage }})"
+        description: "Bifrost {{ $labels.pod }} memory usage > 85% for 5m"
