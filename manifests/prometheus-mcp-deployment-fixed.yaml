@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-mcp
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-mcp
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: prometheus-mcp
+    spec:
+      serviceAccountName: default
+      
+      # Init containers run before main container
+      initContainers:
+      # 1. Wait for Prometheus to be ready
+      - name: wait-for-prometheus
+        image: curlimages/curl:latest
+        imagePullPolicy: Always
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for Prometheus to be ready..."
+            for i in $(seq 1 60); do
+              echo "Attempt $i/60..."
+              if curl -sf http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/-/healthy; then
+                echo "✓ Prometheus is ready!"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "✗ Prometheus did not become ready in time"
+            exit 1
+      
+      # 2. Copy Prometheus MCP binary to shared volume
+      - name: copy-binary
+        image: ghcr.io/tjhop/prometheus-mcp-server:latest
+        imagePullPolicy: Always
+        command: ["cp", "/bin/prometheus-mcp-server", "/shared/prometheus-mcp-server"]
+        volumeMounts:
+        - mountPath: /shared
+          name: shared
+      
+      # Main container: supergateway (bridges stdio to streamableHttp)
+      containers:
+      - name: supergateway
+        image: ghcr.io/supercorp-ai/supergateway:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        
+        command: ["node"]
+        args:
+          - --
+          - /usr/local/lib/node_modules/supergateway/dist/index.js
+          - --stdio
+          - /shared/prometheus-mcp-server --prometheus.url=http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090 --web.listen-address=:0
+          - --outputTransport
+          - streamableHttp
+          - --port
+          - "8080"
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        
+        volumeMounts:
+        - mountPath: /shared
+          name: shared
+      
+      # Shared volume for binary
+      volumes:
+      - name: shared
+        emptyDir: {}
+      
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

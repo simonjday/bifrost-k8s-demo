@@ -437,6 +437,223 @@
       ]
     },
     {
+      "name": "\ud83d\udd27 Direct Prometheus Queries (No MCP)",
+      "description": "Direct HTTP queries to Prometheus API \u2014 bypasses MCP server, always stable",
+      "item": [
+        {
+          "name": "All Bifrost Metrics (Instant)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9090/api/v1/query?query=bifrost_success_requests_total",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "9090",
+              "path": [
+                "api",
+                "v1",
+                "query"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "bifrost_success_requests_total"
+                }
+              ]
+            },
+            "description": "Get all Bifrost success request metrics (instant query)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 8px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 8px;border-bottom:1px solid #1e293b;font-family:monospace;overflow:hidden}tr:hover td{background:#1e293b55}.val{color:#86efac;font-weight:bold}.lbl{color:#cbd5e1;font-size:10px}`;\ntry{const resp = pm.response.json();const results = resp.data.result || [];let html = `<style>${styles}</style><h2>Bifrost Metrics (Direct)</h2><p class=sub>\u2713 Prometheus API \u2014 ${results.length} series</p>`;if(results.length){html += '<table><tr><th>Labels</th><th>Value</th></tr>';results.slice(0,25).forEach(r=>{const lbl = Object.entries(r.metric).filter(([k,v])=>k!=='__name__').map(([k,v])=>`${k}=${v}`).join(', ');const val = r.value[1];html += `<tr><td class=lbl>${lbl}</td><td class=val>${val}</td></tr>`;}); html += '</table>';}else{html += '<p style=\"color:#f87171\">No data</p>';}pm.visualizer.set(html);}catch(e){pm.visualizer.set(`<style>${styles}</style><p style=\"color:#f87171\">Error: ${e.message}</p>`);}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bifrost Errors (Instant)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9090/api/v1/query?query=bifrost_error_requests_total",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "9090",
+              "path": [
+                "api",
+                "v1",
+                "query"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "bifrost_error_requests_total"
+                }
+              ]
+            },
+            "description": "Get all Bifrost error request metrics"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 8px;font-size:14px}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 8px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.val{color:#f87171;font-weight:bold}.warn{color:#fbbf24}`;\ntry{const resp = pm.response.json();const results = resp.data.result || [];let html = `<style>${styles}</style><h2>Bifrost Errors</h2><p class=sub>\u26a0\ufe0f Error requests \u2014 ${results.length} series</p>`;if(results.length){html += '<table><tr><th>Labels</th><th>Errors</th></tr>';results.slice(0,25).forEach(r=>{const lbl = Object.entries(r.metric).filter(([k,v])=>k!=='__name__').map(([k,v])=>`${k}=${v}`).join(', ');const val = r.value[1];html += `<tr><td>${lbl}</td><td class=val>${val}</td></tr>`;}); html += '</table>';}else{html += '<p class=warn>\u2713 No errors detected</p>';}pm.visualizer.set(html);}catch(e){pm.visualizer.set(`<style>${styles}</style><p style=\"color:#f87171\">Error: ${e.message}</p>`);}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Success Rate by Provider (5m avg)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9090/api/v1/query?query=rate(bifrost_success_requests_total[5m])",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "9090",
+              "path": [
+                "api",
+                "v1",
+                "query"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "rate(bifrost_success_requests_total[5m])"
+                }
+              ]
+            },
+            "description": "Success request rate per provider over 5 minutes"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#10b981;margin:0 0 8px;font-size:14px}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 8px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.provider{color:#cbd5e1}.rate{color:#10b981;font-weight:bold}`;\ntry{const resp = pm.response.json();const results = resp.data.result || [];let html = `<style>${styles}</style><h2>Success Rate by Provider</h2><p class=sub>\ud83d\udcc8 5m average rate</p>`;if(results.length){html += '<table><tr><th>Provider</th><th>Rate (req/s)</th></tr>';results.forEach(r=>{const prov = r.metric.provider || 'unknown';const rate = (parseFloat(r.value[1]) || 0).toFixed(2);html += `<tr><td class=provider>${prov}</td><td class=rate>${rate}</td></tr>`;}); html += '</table>';}else{html += '<p style=\"color:#f87171\">No data</p>';}pm.visualizer.set(html);}catch(e){pm.visualizer.set(`<style>${styles}</style><p style=\"color:#f87171\">Error: ${e.message}</p>`);}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token Throughput (5m)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9090/api/v1/query?query=bifrost_output_tokens_total",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "9090",
+              "path": [
+                "api",
+                "v1",
+                "query"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "bifrost_output_tokens_total"
+                }
+              ]
+            },
+            "description": "Output token generation rate by model"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#06b6d4;margin:0 0 8px;font-size:14px}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 8px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.model{color:#cbd5e1}.throughput{color:#06b6d4;font-weight:bold}`;\ntry{const resp = pm.response.json();const results = resp.data.result || [];let html = `<style>${styles}</style><h2>Token Throughput</h2><p class=sub>\ud83d\udcac Output tokens/sec by model</p>`;if(results.length){html += '<table><tr><th>Model</th><th>Tokens/sec</th></tr>';results.forEach(r=>{const model = r.metric.model || 'unknown';const rate = (parseFloat(r.value[1]) || 0).toFixed(1);html += `<tr><td class=model>${model}</td><td class=throughput>${rate}</td></tr>`;}); html += '</table>';}else{html += '<p style=\"color:#f87171\">No data</p>';}pm.visualizer.set(html);}catch(e){pm.visualizer.set(`<style>${styles}</style><p style=\"color:#f87171\">Error: ${e.message}</p>`);}"
+                ]
+              }
+            }
+          ],
+          "description": "Output tokens total by model"
+        },
+        {
+          "name": "Range Query: Requests Over Time (1h)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:9090/api/v1/query_range?query=rate(bifrost_success_requests_total[5m])&start={{start_time}}&end={{end_time}}&step=30s",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "9090",
+              "path": [
+                "api",
+                "v1",
+                "query_range"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "rate(bifrost_success_requests_total[5m])"
+                },
+                {
+                  "key": "start",
+                  "value": "{{start_time}}"
+                },
+                {
+                  "key": "end",
+                  "value": "{{end_time}}"
+                },
+                {
+                  "key": "step",
+                  "value": "30s"
+                }
+              ]
+            },
+            "description": "Time series query for the last hour. Set start_time and end_time in pre-request script or use Unix timestamps."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const now = Math.floor(Date.now() / 1000);const oneHourAgo = now - 3600;pm.environment.set('end_time', now.toString());pm.environment.set('start_time', oneHourAgo.toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#8b5cf6;margin:0 0 8px;font-size:14px}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:10px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:6px;font-weight:600;border-bottom:1px solid #334155}td{padding:4px 6px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.ts{color:#cbd5e1}.val{color:#8b5cf6;font-weight:bold}`;\ntry{const resp = pm.response.json();const results = resp.data.result || [];let html = `<style>${styles}</style><h2>Bifrost Requests Timeline</h2><p class=sub>\ud83d\udcca 1-hour range query \u2014 ${results.length} series</p>`;if(results.length){html += '<table><tr><th>Series</th><th>Points</th></tr>';results.slice(0,10).forEach(r=>{const labels = Object.entries(r.metric).filter(([k,v])=>k!=='__name__').map(([k,v])=>`${k}=${v}`).join(', ');const pts = r.values ? r.values.length : 0;html += `<tr><td style=\"font-size:9px\">${labels || 'all'}</td><td class=val>${pts}</td></tr>`;}); html += '</table><p class=sub>Showing 10 of ${results.length} series</p>';}else{html += '<p style=\"color:#f87171\">No data in range</p>';}pm.visualizer.set(html);}catch(e){pm.visualizer.set(`<style>${styles}</style><p style=\"color:#f87171\">Error: ${e.message}</p>`);}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "\ud83d\udeab Restricted \u2014 Access Denied Examples",
       "description": "These requests intentionally use the RESTRICTED_KEY to call admin-only tools. Expected to fail \u2014 demonstrates permission enforcement.",
       "item": [
@@ -2070,7 +2287,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"bifrost_gateway_requests_total\"}}}"
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"bifrost_success_requests_total\"}}}"
             }
           },
           "event": [
@@ -2079,7 +2296,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 8px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 8px;border-bottom:1px solid #1e293b;font-family:monospace;overflow:hidden}tr:hover td{background:#1e293b55}.val{color:#86efac;font-weight:bold}.err{color:#f87171}`;\ntry{\n  const resp = pm.response.json();\n  const txt = resp.result.content[0].text;\n  let prom = txt;\n  try{const p = JSON.parse(txt); prom = p.result || txt;}catch(e){}\n  const lines = prom.split('\\n').filter(l=>l.trim());\n  let html = `<style>${styles}</style><h2>Bifrost Metrics</h2><p class=sub>${lines.length} series</p>`;\n  if(lines.length){\n    html += '<table><tr><th>Metric</th><th>Value</th></tr>';\n    lines.slice(0,25).forEach(l=>{\n      const m = l.match(/^(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(m) html += `<tr><td>${m[1].substring(0,100)}</td><td class=val>${m[2]}</td></tr>`;\n    });\n    html += '</table>';\n  }\n  pm.visualizer.set(html);\n}catch(e){pm.visualizer.set(`<style>${styles}</style><p class=err>Error: ${e.message}</p>`);}\n"
                 ]
               }
             }
@@ -2107,7 +2324,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"sum(rate(bifrost_gateway_requests_total[5m])) by (provider)\"}}}"
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"sum(rate(bifrost_success_requests_total[5m])) by (provider)\"}}}"
             }
           },
           "event": [
@@ -2116,7 +2333,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 8px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 8px;border-bottom:1px solid #1e293b;font-family:monospace;overflow:hidden}tr:hover td{background:#1e293b55}.val{color:#86efac;font-weight:bold}.err{color:#f87171}`;\ntry{\n  const resp = pm.response.json();\n  const txt = resp.result.content[0].text;\n  let prom = txt;\n  try{const p = JSON.parse(txt); prom = p.result || txt;}catch(e){}\n  const lines = prom.split('\\n').filter(l=>l.trim());\n  let html = `<style>${styles}</style><h2>Bifrost Metrics</h2><p class=sub>${lines.length} series</p>`;\n  if(lines.length){\n    html += '<table><tr><th>Metric</th><th>Value</th></tr>';\n    lines.slice(0,25).forEach(l=>{\n      const m = l.match(/^(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(m) html += `<tr><td>${m[1].substring(0,100)}</td><td class=val>${m[2]}</td></tr>`;\n    });\n    html += '</table>';\n  }\n  pm.visualizer.set(html);\n}catch(e){pm.visualizer.set(`<style>${styles}</style><p class=err>Error: ${e.message}</p>`);}\n"
                 ]
               }
             }
@@ -2144,7 +2361,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"sum(rate(bifrost_gateway_requests_total{status=\\\"error\\\"}[5m])) by (provider)\"}}}"
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"prometheus-query\", \"arguments\": {\"query\": \"sum(rate(bifrost_error_requests_total[5m])) by (provider)\"}}}"
             }
           },
           "event": [
@@ -2153,7 +2370,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 8px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 8px;border-bottom:1px solid #1e293b;font-family:monospace;overflow:hidden}tr:hover td{background:#1e293b55}.val{color:#86efac;font-weight:bold}.err{color:#f87171}`;\ntry{\n  const resp = pm.response.json();\n  const txt = resp.result.content[0].text;\n  let prom = txt;\n  try{const p = JSON.parse(txt); prom = p.result || txt;}catch(e){}\n  const lines = prom.split('\\n').filter(l=>l.trim());\n  let html = `<style>${styles}</style><h2>Bifrost Metrics</h2><p class=sub>${lines.length} series</p>`;\n  if(lines.length){\n    html += '<table><tr><th>Metric</th><th>Value</th></tr>';\n    lines.slice(0,25).forEach(l=>{\n      const m = l.match(/^(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(m) html += `<tr><td>${m[1].substring(0,100)}</td><td class=val>${m[2]}</td></tr>`;\n    });\n    html += '</table>';\n  }\n  pm.visualizer.set(html);\n}catch(e){pm.visualizer.set(`<style>${styles}</style><p class=err>Error: ${e.message}</p>`);}\n"
                 ]
               }
             }
@@ -2181,7 +2398,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"histogram_quantile(0.95, sum(rate(bifrost_gateway_request_duration_seconds_bucket[5m])) by (le, model))\"}}}"
+              "raw": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"prometheus-query\", \"arguments\": {\"query\": \"sum(rate(bifrost_success_requests_total[5m])) by (model)\"}}}"
             }
           },
           "event": [
@@ -2190,7 +2407,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 8px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 8px;border-bottom:1px solid #1e293b;font-family:monospace;overflow:hidden}tr:hover td{background:#1e293b55}.val{color:#86efac;font-weight:bold}.err{color:#f87171}`;\ntry{\n  const resp = pm.response.json();\n  const txt = resp.result.content[0].text;\n  let prom = txt;\n  try{const p = JSON.parse(txt); prom = p.result || txt;}catch(e){}\n  const lines = prom.split('\\n').filter(l=>l.trim());\n  let html = `<style>${styles}</style><h2>Bifrost Metrics</h2><p class=sub>${lines.length} series</p>`;\n  if(lines.length){\n    html += '<table><tr><th>Metric</th><th>Value</th></tr>';\n    lines.slice(0,25).forEach(l=>{\n      const m = l.match(/^(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(m) html += `<tr><td>${m[1].substring(0,100)}</td><td class=val>${m[2]}</td></tr>`;\n    });\n    html += '</table>';\n  }\n  pm.visualizer.set(html);\n}catch(e){pm.visualizer.set(`<style>${styles}</style><p class=err>Error: ${e.message}</p>`);}\n"
                 ]
               }
             }
@@ -2218,7 +2435,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"sum(rate(bifrost_gateway_requests_total[5m])) by (provider, model)\"}}}"
+              "raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"prometheus-query\",\"arguments\":{\"query\":\"sum(rate(bifrost_success_requests_total[5m])) by (provider, model)\"}}}"
             }
           },
           "event": [
@@ -2227,7 +2444,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const styles=`body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 4px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px 12px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 12px;border-bottom:1px solid #1e293b;font-family:monospace}tr:hover td{background:#1e293b55}.err{color:#f87171}`;\ntry {\n  const text = pm.response.json().result.content[0].text;\n  let data; try { data = JSON.parse(text); } catch(_) { data = null; }\n  let rows = '';\n  if(data) {\n    const lines = text.trim().split('\\n').filter(l => l.length > 0);\n    rows = lines.slice(0, 20).map(l => {\n      const match = l.match(/(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(!match) return '';\n      return `<tr><td style=\"word-break:break-all\">${match[1].substring(0,100)}</td><td>${match[2]}</td></tr>`;\n    }).filter(r => r).join('');\n  }\n  pm.visualizer.set(`<style>${styles}</style><h2>Bifrost Metrics</h2><p class='sub'>\ud83d\udd2e Gateway</p><table><thead><tr><th>Labels</th><th>Value</th></tr></thead><tbody>${rows || 'No data'}</tbody></table>`);\n} catch(e) { pm.visualizer.set(`<style>${styles}</style><p class='err'>${e.message}</p>`); }"
+                  "const styles = `body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;padding:16px;margin:0}h2{color:#fb923c;margin:0 0 8px;font-size:14px;text-transform:uppercase}p.sub{color:#475569;font-size:11px;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1e293b;color:#94a3b8;text-align:left;padding:8px;font-weight:600;border-bottom:1px solid #334155}td{padding:6px 8px;border-bottom:1px solid #1e293b;font-family:monospace;overflow:hidden}tr:hover td{background:#1e293b55}.val{color:#86efac;font-weight:bold}.err{color:#f87171}`;\ntry{\n  const resp = pm.response.json();\n  const txt = resp.result.content[0].text;\n  let prom = txt;\n  try{const p = JSON.parse(txt); prom = p.result || txt;}catch(e){}\n  const lines = prom.split('\\n').filter(l=>l.trim());\n  let html = `<style>${styles}</style><h2>Bifrost Metrics</h2><p class=sub>${lines.length} series</p>`;\n  if(lines.length){\n    html += '<table><tr><th>Metric</th><th>Value</th></tr>';\n    lines.slice(0,25).forEach(l=>{\n      const m = l.match(/^(.+?)\\s*=>\\s*(.+?)\\s*@/);\n      if(m) html += `<tr><td>${m[1].substring(0,100)}</td><td class=val>${m[2]}</td></tr>`;\n    });\n    html += '</table>';\n  }\n  pm.visualizer.set(html);\n}catch(e){pm.visualizer.set(`<style>${styles}</style><p class=err>Error: ${e.message}</p>`);}\n"
                 ]
               }
             }
