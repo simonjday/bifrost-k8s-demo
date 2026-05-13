@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 # install.sh — Full Bifrost + MCP install on k3d or kind
 # Dry-run by default. Pass --apply to execute.
-# Usage: ./scripts/install.sh [--apply] [--context <kubectl-context>]
+# Usage: ./scripts/install.sh [--apply] [--context <kubectl-context>] [--bifrost-version <version>]
 #
 # Auto-detects cluster type (k3d vs kind) and applies the correct MCP networking:
 #   k3d  → ClusterIP + manual Endpoints (Mac LAN IP 192.168.1.21)
@@ -9,21 +9,26 @@
 
 set -euo pipefail
 
+# Resolve repo root (script is in scripts/ subdirectory)
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
 DRY_RUN=true
 CONTEXT=""
+BIFROST_VERSION="${BIFROST_VERSION:-v1.5.0}"  # Default to v1.5.0, overridable via CLI arg or env var
 
 # Parse args
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --apply)   DRY_RUN=false; shift ;;
-    --context) CONTEXT="$2"; shift 2 ;;
-    *)         echo "Unknown arg: $1"; exit 1 ;;
+    --apply)            DRY_RUN=false; shift ;;
+    --context)          CONTEXT="$2"; shift 2 ;;
+    --bifrost-version)  BIFROST_VERSION="$2"; shift 2 ;;
+    *)                  echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
 
 NS="ai-gateway"
-BIFROST_VERSION="v1.5.0"
 HELM_CHART_REPO="https://maximhq.github.io/bifrost/helm-charts"
+
 # Use function for kubectl to handle --context properly
 kubectl_cmd() {
   if [[ -n "$CONTEXT" ]]; then
@@ -92,14 +97,16 @@ fi
 # ── Step 4: Bifrost Helm install ──────────────────────────────────────────────
 echo "--- Step 4: Bifrost Helm install"
 if ! $DRY_RUN && helm ${CONTEXT:+--kube-context $CONTEXT} -n $NS status bifrost &>/dev/null; then
-  echo "    Release already installed — upgrading"
+  echo "    Release already installed — upgrading to $BIFROST_VERSION"
   run "helm ${CONTEXT:+--kube-context $CONTEXT} upgrade bifrost bifrost/bifrost \
     --namespace $NS \
-    -f manifests/bifrost-values-dev.yaml"
+    -f $REPO_ROOT/manifests/bifrost-values-dev.yaml \
+    --set image.tag=$BIFROST_VERSION"
 else
   run "helm ${CONTEXT:+--kube-context $CONTEXT} install bifrost bifrost/bifrost \
     --namespace $NS \
-    -f manifests/bifrost-values-dev.yaml"
+    -f $REPO_ROOT/manifests/bifrost-values-dev.yaml \
+    --set image.tag=$BIFROST_VERSION"
 fi
 
 # ── Step 5: MCP networking ────────────────────────────────────────────────────
@@ -107,11 +114,11 @@ echo "--- Step 5: MCP host networking ($CLUSTER_TYPE)"
 
 if [[ "$CLUSTER_TYPE" == "k3d" ]]; then
   echo "    Applying ClusterIP + Endpoints (Mac LAN IP) for k3d..."
-  run "kubectl_cmd apply -f manifests/mcp-kubernetes-host-svc.yaml"
+  run "kubectl_cmd apply -f $REPO_ROOT/manifests/mcp-kubernetes-host-svc.yaml"
 
 elif [[ "$CLUSTER_TYPE" == "kind" ]]; then
   echo "    Applying socat proxy Deployment + Service for kind..."
-  run "kubectl_cmd apply -f manifests/mcp-kubernetes-proxy-kind.yaml"
+  run "kubectl_cmd apply -f $REPO_ROOT/manifests/mcp-kubernetes-proxy-kind.yaml"
 
   # Clean up any stale manual EndpointSlices — they conflict with the
   # controller-managed one and break kube-proxy routing
@@ -163,15 +170,48 @@ else
   fi
 fi
 
-# ── Step 7: Observability manifests ──────────────────────────────────────────
-echo "--- Step 7: Observability manifests"
-echo "    Applying Bifrost config (telemetry plugin enabled)..."
-run "kubectl_cmd create configmap bifrost-config \
-  --from-file=config.json=manifests/bifrost-config.json \
-  -n $NS \
-  --dry-run=client -o yaml | kubectl_cmd apply -f -"
-run "kubectl_cmd apply -f manifests/bifrost-servicemonitor.yaml"
-run "kubectl_cmd apply -f manifests/bifrost-alerts.yaml"
+# ── Step 7: Clean up old ConfigMap (created by kubectl apply) ───────────────
+# Bifrost Helm chart manages ConfigMap, but old kubectl-applied ConfigMap
+# conflicts with Helm's server-side apply. Delete it so Helm can manage fresh.
+# ConfigMap content comes from manifests/bifrost-config.json (git-controlled).
+# Safe to delete — Helm will recreate with same content.
+echo "--- Step 7: Clean up ConfigMap conflicts"
+if ! $DRY_RUN && kubectl_cmd -n $NS get configmap bifrost-config &>/dev/null; then
+  echo "    Deleting old ConfigMap (will be managed by Helm)..."
+  kubectl_cmd -n $NS delete configmap bifrost-config
+else
+  echo "    No old ConfigMap found"
+fi
+
+# ── Step 7b: Observability manifests ─────────────────────────────────────────
+echo "--- Step 7b: Observability manifests"
+
+# Only create ServiceMonitor if it doesn't exist
+if ! $DRY_RUN && kubectl_cmd -n monitoring get servicemonitor bifrost &>/dev/null; then
+  echo "    ServiceMonitor already exists — skipping"
+else
+  echo "    Creating ServiceMonitor..."
+  run "kubectl_cmd apply -f $REPO_ROOT/manifests/bifrost-servicemonitor.yaml"
+fi
+
+# Validate ServiceMonitor labels (critical for Prometheus discovery)
+if ! $DRY_RUN; then
+  RELEASE_LABEL=$(kubectl_cmd get servicemonitor -n $NS bifrost -o jsonpath='{.metadata.labels.release}' 2>/dev/null || echo "")
+  if [[ "$RELEASE_LABEL" != "kube-prometheus-stack" ]]; then
+    echo "    ⚠ WARNING: ServiceMonitor release label is '$RELEASE_LABEL', expected 'kube-prometheus-stack'"
+    echo "      This will prevent Prometheus from discovering Bifrost metrics."
+    echo "      Fix: kubectl patch servicemonitor bifrost -n $NS --type merge -p '{\"metadata\":{\"labels\":{\"release\":\"kube-prometheus-stack\"}}}'"
+  else
+    echo "    ✓ ServiceMonitor labels validated"
+  fi
+fi
+
+# Only create alerts if they don't exist
+if ! $DRY_RUN && kubectl_cmd -n monitoring get prometheusrule bifrost &>/dev/null; then
+  echo "    PrometheusRule already exists — skipping"
+else
+  run "kubectl_cmd apply -f $REPO_ROOT/manifests/bifrost-alerts.yaml"
+fi
 
 # ── Step 8: Wait for Bifrost ──────────────────────────────────────────────────
 echo "--- Step 8: Wait for Bifrost pod"

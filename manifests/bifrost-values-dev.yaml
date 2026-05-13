@@ -1,9 +1,7 @@
 # bifrost-values-dev.yaml
 # Minimal kind/k3d dev install — SQLite, single replica, ephemeral storage
 # Usage: helm install bifrost bifrost/bifrost -n ai-gateway -f bifrost-values-dev.yaml
-
-image:
-  tag: v1.5.0
+# Version: Set via --set image.tag=<version> or BIFROST_VERSION env var in install.sh
 
 bifrost:
   encryptionKeySecret:
