@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-mcp
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-mcp
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: prometheus-mcp
+    spec:
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      initContainers:
+      - name: wait-for-prometheus
+        image: curlimages/curl:latest
+        imagePullPolicy: Always
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for Prometheus to be ready..."
+            for i in $(seq 1 60); do
+              echo "Attempt $i/60..."
+              if curl -sf http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/-/healthy; then
+                echo "✓ Prometheus is ready!"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "✗ Prometheus did not become ready in time"
+            exit 1
+      - name: copy-binary
+        image: ghcr.io/tjhop/prometheus-mcp-server:latest
+        imagePullPolicy: Always
+        command:
+          - cp
+          - /bin/prometheus-mcp-server
+          - /shared/prometheus-mcp-server
+        volumeMounts:
+          - name: shared
+            mountPath: /shared
+      containers:
+      - name: supergateway
+        image: ghcr.io/supercorp-ai/supergateway:latest
+        imagePullPolicy: Always
+        ports:
+          - name: http
+            containerPort: 8080
+            protocol: TCP
+        command:
+          - node
+        args:
+          - /usr/local/lib/node_modules/supergateway/dist/index.js
+          - --stdio
+          - "/shared/prometheus-mcp-server --prometheus.timeout=60s --mcp.session-timeout=10m --prometheus.url=http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090 --web.listen-address=:0"
+          - --outputTransport
+          - streamableHttp
+          - --stateful
+          - --sessionTimeout
+          - "300000"
+          - --port
+          - "8080"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        volumeMounts:
+          - name: shared
+            mountPath: /shared
+        
+        # READINESS PROBE: Validates MCP session is alive (checks ping response)
+        # Checks every 3 seconds instead of 5 — detects failure within ~6 seconds
+        # Fails fast (failureThreshold: 1) so Bifrost triggers reconnect quickly
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              curl -sf -X POST http://localhost:8080 \
+                -H "Content-Type: application/json" \
+                -d '{"jsonrpc":"2.0","id":999,"method":"ping","params":{}}' | grep -q '"id":999'
+          initialDelaySeconds: 15
+          periodSeconds: 3
+          timeoutSeconds: 2
+          failureThreshold: 1
+          successThreshold: 1
+        
+        # LIVENESS PROBE: TCP check (fast container-level crash detection)
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+      
+      volumes:
+      - name: shared
+        emptyDir: {}
