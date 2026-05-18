@@ -1,7 +1,5 @@
 #!/usr/bin/env zsh
 # warmup-ollama.sh — Pre-warm Ollama models before demo
-# First call on large models takes 30-60s while Ollama loads into memory.
-# Run this before the demo to avoid cold-start delays.
 
 echo "Warming up Ollama models..."
 echo ""
@@ -9,13 +7,14 @@ echo ""
 models=(
   "qwen2.5:7b"
   "qwen3-coder:30b"
+  "llama3.2:3b"
 )
 
 for model in $models; do
   echo "==> Warming up $model..."
   curl -s http://localhost:11434/api/generate \
     -d "{\"model\":\"$model\",\"prompt\":\"hello\",\"stream\":false}" \
-    | jq -r '"  [\($model)] response: \(.response[:50])..."'
+    | jq --arg model "$model" -r '"  [\($model)] response: \(.response[:50])..."'
   echo ""
 done
 
